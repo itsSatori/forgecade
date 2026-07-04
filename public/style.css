@@ -232,15 +232,31 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 #mute:hover { background: var(--divider); }
 
 /* --- warm-up mini game ---------------------------------------------------- */
-.warmup-slot { margin-top: 2rem; }
+.warmup-slot { margin-top: 2.2rem; }
 .warmup-slot:empty { display: none; }
+.warmup-wrap {
+  width: min(92vw, 860px);
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+}
 canvas.warmup {
   display: block;
   width: 100%;
-  image-rendering: pixelated;
-  border-top: 1px solid var(--block-2);
-  border-bottom: 1px solid var(--block-2);
+  aspect-ratio: 2.4;
+  border: 1px solid var(--block-2);
+  border-radius: 14px;
+  background: var(--paper);
 }
+.warmup-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 11px;
+  color: var(--sub);
+  padding: .4rem .2rem 0;
+}
+.warmup-caption .k { font-family: var(--mono); }
 
 /* fire mode easter egg */
 body.fire-mode .view.active { animation: wobble .35s ease-in-out infinite; }

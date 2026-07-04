@@ -1,72 +1,101 @@
-// Forgecade warm-up: a tiny Smash-style platform brawler in Chrome-offline
-// pixel monochrome. Everyone in the room fights on the same stage while
-// waiting — each player as their own golem (same head shapes as the lobby
-// avatars). Percent damage, growing knockback, blast zones. No scoreboard,
-// just violence. Alone? You get a sandbag.
+// Forgecade Warm-up Arena — a small but complete Smash-style platform
+// brawler in Chrome-offline monochrome. Native-resolution rendering
+// (DPR-aware), four distinct attacks, seeded random item spawns shared by
+// the whole room, animated pixel golems, hitpause, screen shake, dust.
+// Everyone waiting fights on the same stage. Alone? You get a sandbag.
 import { sound, hashId } from "/fx.js";
 
-const W = 480, H = 200, CELL = 2;
-const F_W = 32, F_H = 30;
-const GRAVITY = 0.0025, MOVE_V = 0.17, JUMP_V = -0.52, FRICTION = 0.86;
-const ATK_MS = 120, ATK_CD = 380, HITSTUN = 320, RESPAWN_INVULN = 1500;
+// logical coordinate space (canvas backing scales with element size × DPR)
+const W = 720, H = 300, CELL = 2;
+const F_W = 44, F_H = 38;
+const GRAVITY = 0.004, MOVE_V = 0.28, JUMP_V = -0.85, FRICTION = 0.85;
+const HITSTUN = 320, RESPAWN_INVULN = 1600, HITPAUSE = 55;
 const INK = "#535353", GHOST = "#9e9e9e", MID = "#767676", PAPER = "#f6f6f6";
 
-// stage: one main platform with open edges + three one-way clouds
-const MAIN = { l: 70, r: 410, y: 168 };
+const MAIN = { l: 105, r: 615, y: 252 };
 const CLOUDS = [
-  { l: 96, r: 190, y: 116 },
-  { l: 290, r: 384, y: 116 },
-  { l: 193, r: 287, y: 66 },
+  { l: 144, r: 285, y: 174 },
+  { l: 435, r: 576, y: 174 },
+  { l: 290, r: 430, y: 99 },
 ];
-const BLAST = { l: -50, r: W + 50, t: -70, b: H + 50 };
+const BLAST = { l: -70, r: W + 70, t: -100, b: H + 70 };
+const SPAWNS = [
+  { x: 150, y: 180 }, { x: 530, y: 180 },
+  { x: 190, y: 110 }, { x: 340, y: 40 },
+];
 
-// pixel golems — head variants match the lobby avatars (hash % 3)
-const GOLEM_BODIES = [
-  [ // 0: round helm
-    "....########....",
-    "..############..",
-    ".##############.",
-    ".##..######..##.",
-    ".##############.",
-    ".##############.",
-    "..############..",
-    "....########....",
-    "...##########...",
-    "...##########...",
-    "...##########...",
-    "....########....",
+// --- moves ------------------------------------------------------------------
+// m: 0 jab, 1 side smack, 2 uppercut, 3 dive
+const MOVES = [
+  { dmg: 7,  kx: 0.30, ky: -0.35, cd: 300, dur: 110, reach: 30, up: 0 },
+  { dmg: 11, kx: 0.55, ky: -0.25, cd: 460, dur: 130, reach: 38, up: 0, lunge: 0.30 },
+  { dmg: 10, kx: 0.10, ky: -0.78, cd: 460, dur: 130, reach: 26, up: -30 },
+  { dmg: 13, kx: 0.18, ky: -0.55, cd: 600, dur: 400, reach: 30, up: 20 },
+];
+
+// --- pixel art (22-wide golems, head variant = lobby avatar hash) -------------
+const HEADS = [
+  [ // round helm
+    ".......########.......",
+    ".....############.....",
+    "....##############....",
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "....##############....",
   ],
-  [ // 1: bucket
-    "..############..",
-    "..############..",
-    "..##..####..##..",
-    "..############..",
-    "..############..",
-    "...##########...",
-    ".....######.....",
-    "....########....",
-    "...##########...",
-    "...##########...",
-    "...##########...",
-    "....########....",
+  [ // bucket
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "....##############....",
+    ".....############.....",
+    ".....############.....",
   ],
-  [ // 2: pot with rivets
-    "......####......",
-    "....########....",
-    "..############..",
-    ".##..######..##.",
-    ".##############.",
-    ".#.##########.#.",
-    "..############..",
-    "....########....",
-    "...##########...",
-    "...##########...",
-    "...##########...",
-    "....########....",
+  [ // pot with brim
+    ".........####.........",
+    ".......########.......",
+    ".....############.....",
+    "...################...",
+    "...################...",
+    "..##################..",
+    "...################...",
+    "....##############....",
   ],
 ];
-const LEGS_A = ["....##....##....", "...###....###..."];
-const LEGS_B = ["...##......##...", "...##......##..."];
+const TORSO = [
+  ".....############.....",
+  "......##########......",
+  "......##########......",
+  ".....############.....",
+  "....##############....",
+  "....##############....",
+  ".....############.....",
+  "......##########......",
+];
+const LEGS_IDLE = [
+  "......###....###......",
+  "......###....###......",
+  ".....####....####.....",
+];
+const LEGS_RUN1 = [
+  ".....###......###.....",
+  "....###........###....",
+  "...###..........###...",
+];
+const LEGS_RUN2 = [
+  ".......###..###.......",
+  "........##..##........",
+  ".......###..###.......",
+];
+const LEGS_AIR = [
+  "......###..###........",
+  ".......##.##..........",
+  "......................",
+];
 const SANDBAG = [
   ".######.",
   "########",
@@ -77,34 +106,62 @@ const SANDBAG = [
   "########",
   ".######.",
 ];
+const HAMMER = [
+  "...########.",
+  "..##########",
+  "..##########",
+  "...########.",
+  ".....##.....",
+  ".....##.....",
+  ".....##.....",
+  ".....##.....",
+  ".....##.....",
+];
 const CLOUD_TEX = ["..##..##..##..", "##############"];
 
-let canvas = null, cx = null, raf = null;
+// --- module state --------------------------------------------------------------
+let wrap = null, canvas = null, cx = null, raf = null, ro = null;
+let scaleX = 1, scaleY = 1;
 let sendFn = () => {};
-let myId = null, names = {};
+let myId = null, names = {}, epoch = 0, clockOffset = 0;
 
-function freshFighter(x) {
+function freshFighter(spawn) {
+  const s = spawn ?? SPAWNS[Math.floor(Math.random() * SPAWNS.length)];
   return {
-    x, y: 40, vx: 0, vy: 0, face: 1, dmg: 0, jumps: 2,
-    atkUntil: 0, cdUntil: 0, stunUntil: 0, invulnUntil: 0, dropUntil: 0,
+    x: s.x, y: s.y, vx: 0, vy: 0, face: 1, dmg: 0, jumps: 2,
+    move: -1, atkUntil: 0, cdUntil: 0, stunUntil: 0,
+    invulnUntil: 0, dropUntil: 0, diving: false, descending: true,
   };
 }
-let me = freshFighter(140);
-const ghosts = new Map(); // id -> {x,y,face,dmg,atk,seen}
-let dummy = null;         // sandbag when alone
+let me = freshFighter();
+const ghosts = new Map(); // id -> {x,y,gx,gy,face,dmg,anim,hammer,seen}
+let dummy = null;
 let keys = {}, lastSent = 0, lastTick = 0, hitVictims = new Set();
-let sparks = [];
+let sparks = [], dust = [], rings = [], trail = [];
+let shake = 0, freezeUntil = 0, bannerUntil = 0, blinkAt = 0;
+let hammer = null;        // {k, x, y, until} — the item on stage
+let myHammerUntil = 0;    // holding period
+const claimedHammers = new Set();
 
 const nowMs = () => performance.now();
+const roomT = () => Date.now() + clockOffset - epoch;
 
-// --- physics -----------------------------------------------------------------
+function seededRnd(k) {
+  let s = ((epoch % 2147483647) ^ (k * 2654435761)) | 0;
+  s = Math.imul(s ^ (s >>> 15), 1 | s);
+  s = (s + Math.imul(s ^ (s >>> 7), 61 | s)) ^ s;
+  return ((s ^ (s >>> 14)) >>> 0) / 4294967296;
+}
+
+// --- physics ---------------------------------------------------------------------
+function platforms() { return [MAIN, ...CLOUDS]; }
 function onPlatform(f) {
   const feet = f.y + F_H;
   if (f.vy < 0) return null;
-  if (f.x + 26 > MAIN.l && f.x + 6 < MAIN.r && Math.abs(feet - MAIN.y) < 6) return MAIN;
+  if (f.x + F_W - 8 > MAIN.l && f.x + 8 < MAIN.r && Math.abs(feet - MAIN.y) < 7) return MAIN;
   if (nowMs() > f.dropUntil) {
     for (const c of CLOUDS) {
-      if (f.x + 26 > c.l && f.x + 6 < c.r && Math.abs(feet - c.y) < 6) return c;
+      if (f.x + F_W - 8 > c.l && f.x + 8 < c.r && Math.abs(feet - c.y) < 7) return c;
     }
   }
   return null;
@@ -113,212 +170,435 @@ function onPlatform(f) {
 function stepFighter(f, dt, input) {
   const t = nowMs();
   const stunned = t < f.stunUntil;
+  const attacking = t < f.atkUntil;
   if (input && !stunned) {
     if (input.left) { f.vx = -MOVE_V; f.face = -1; }
     else if (input.right) { f.vx = MOVE_V; f.face = 1; }
-    if (input.jump && !input._jumpHeld && f.jumps > 0) {
-      f.vy = JUMP_V; f.jumps--; sound.tick();
+    if (input.jump && !input._jumpHeld && f.jumps > 0 && !f.diving) {
+      f.vy = JUMP_V; f.jumps--; f.descending = false;
+      sound.blip(f.jumps === 1 ? 520 : 700, 0.09, 0.07);
+      puffDust(f.x + F_W / 2, f.y + F_H, 3);
     }
     input._jumpHeld = input.jump;
-    if (input.down) f.dropUntil = t + 250;
+    if (input.down && !input.attack) f.dropUntil = t + 250;
   }
-  f.vy += GRAVITY * dt;
+  const g = f.descending ? GRAVITY * 0.22 : GRAVITY;
+  f.vy += g * dt;
+  if (f.diving) f.vy = Math.max(f.vy, 0.9);
   f.x += f.vx * dt;
   f.y += f.vy * dt;
   const plat = onPlatform(f);
   if (plat) {
+    const wasFalling = f.vy > 0.35 || f.diving;
     f.y = plat.y - F_H;
     f.vy = 0;
     f.jumps = 2;
-    if (!input || (!input.left && !input.right) || stunned) f.vx *= FRICTION;
+    f.descending = false;
+    if (f.diving) landDive(f);
+    else if (wasFalling) puffDust(f.x + F_W / 2, f.y + F_H, 5);
+    if (!input || (!input.left && !input.right) || stunned || attacking) f.vx *= FRICTION;
+  }
+}
+
+function landDive(f) {
+  f.diving = false;
+  f.atkUntil = 0;
+  shake = Math.max(shake, 7);
+  rings.push({ x: f.x + F_W / 2, y: f.y + F_H, r: 6, life: 1 });
+  puffDust(f.x + F_W / 2, f.y + F_H, 10);
+  sound.drum(); sound.clang(0.7);
+  // shockwave hits anyone close on the same height
+  for (const [id, g] of ghosts) {
+    if (nowMs() - g.seen > 4000) continue;
+    if (Math.abs(g.x - f.x) < 70 && Math.abs((g.y + F_H) - (f.y + F_H)) < 24) {
+      dealHit(id, g, 3);
+    }
+  }
+  if (dummy && Math.abs(dummy.x - f.x) < 70 && Math.abs(dummy.y - f.y) < 30) {
+    applyKnock(dummy, 3, Math.sign(dummy.x - f.x) || 1);
   }
 }
 
 function respawn(f) {
-  Object.assign(f, freshFighter(210 + Math.random() * 60));
+  Object.assign(f, freshFighter());
   f.invulnUntil = nowMs() + RESPAWN_INVULN;
 }
 
-function burst(x, y, n, color) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2;
-    sparks.push({ x, y, vx: Math.cos(a) * 0.15, vy: Math.sin(a) * 0.15 - 0.05, life: 1, color });
-  }
-}
-
-// --- combat -------------------------------------------------------------------
-function attackBox(f) {
-  return { l: f.x + 16 + f.face * 22 - 13, r: f.x + 16 + f.face * 22 + 13, t: f.y + 2, b: f.y + 28 };
+// --- combat ----------------------------------------------------------------------
+function attackBox(f, m) {
+  const mv = MOVES[m];
+  const cxr = f.x + F_W / 2 + f.face * (F_W / 2 + mv.reach / 2);
+  const cy = f.y + F_H / 2 + mv.up;
+  return { l: cxr - mv.reach / 2 - 6, r: cxr + mv.reach / 2 + 6, t: cy - 20, b: cy + 20 };
 }
 function bodyBox(f) {
-  return { l: f.x + 4, r: f.x + 28, t: f.y, b: f.y + F_H };
+  return { l: f.x + 6, r: f.x + F_W - 6, t: f.y, b: f.y + F_H };
 }
-function overlap(a, b) {
-  return a.r > b.l && a.l < b.r && a.b > b.t && a.t < b.b;
+const overlap = (a, b) => a.r > b.l && a.l < b.r && a.b > b.t && a.t < b.b;
+
+function applyKnock(f, m, dir, boosted = false) {
+  const mv = MOVES[m];
+  const mult = boosted ? 1.8 : 1;
+  f.dmg = Math.min(999, f.dmg + Math.round(mv.dmg * (boosted ? 1.6 : 1)));
+  const scale = (1 + f.dmg / 50) * mult;
+  f.vx = mv.kx * dir * scale;
+  f.vy = mv.ky * scale;
+  f.stunUntil = nowMs() + HITSTUN;
 }
-function knock(f, kx, ky, dmg, t) {
-  f.dmg = Math.min(999, f.dmg + dmg);
-  const scale = 1 + f.dmg / 55;
-  f.vx = kx * scale;
-  f.vy = ky * scale;
-  f.stunUntil = t + HITSTUN;
+
+function dealHit(id, g, m) {
+  if (hitVictims.has(id)) return;
+  hitVictims.add(id);
+  const boosted = nowMs() < myHammerUntil;
+  sendFn({ hit: { to: id, m, dir: me.face, boost: boosted ? 1 : 0 } });
+  burstAt(g.x + F_W / 2, g.y + F_H / 2, 8, MID);
+  freezeUntil = nowMs() + HITPAUSE;
+  shake = Math.max(shake, boosted ? 8 : 4);
+  sound.clang(boosted ? 1.3 : 0.5 + m * 0.12);
 }
 
 function tryAttack(t) {
-  if (t < me.cdUntil || t < me.stunUntil) return;
-  me.cdUntil = t + ATK_CD;
-  me.atkUntil = t + ATK_MS;
+  if (t < me.cdUntil || t < me.stunUntil || me.diving) return;
+  const airborne = me.vy !== 0 || !onPlatform(me);
+  let m = 0;
+  if (keys.down && airborne) m = 3;
+  else if (keys.jump || keys.upAtk) m = 2;
+  else if (keys.left || keys.right) m = 1;
+  const mv = MOVES[m];
+  me.move = m;
+  me.cdUntil = t + mv.cd;
+  me.atkUntil = t + mv.dur;
   hitVictims = new Set();
-  sendFn({ atk: 1 });
-  sound.whoosh();
+  if (m === 1) me.vx = me.face * (MOVE_V + mv.lunge);
+  if (m === 3) { me.diving = true; sound.blip(180, 0.25, 0.1, "sawtooth"); }
+  else sound.blip([300, 240, 420, 200][m], 0.07, 0.06, "sawtooth");
+  sendFn({ atk: m });
 }
 
 function resolveAttack(t) {
-  if (t > me.atkUntil) return;
-  const box = attackBox(me);
+  if (t > me.atkUntil || me.move < 0) return;
+  const box = me.diving
+    ? { l: me.x + 4, r: me.x + F_W - 4, t: me.y + F_H / 2, b: me.y + F_H + 16 }
+    : attackBox(me, me.move);
   for (const [id, g] of ghosts) {
-    if (hitVictims.has(id) || t - g.seen > 4000) continue;
-    if (overlap(box, bodyBox(g))) {
-      hitVictims.add(id);
-      sendFn({ hit: { to: id, kx: me.face * 0.22, ky: -0.3, dmg: 9 } });
-      burst(g.x + 16, g.y + 16, 6, MID);
-      sound.clang(0.4);
-    }
+    if (t - g.seen > 4000) continue;
+    if (overlap(box, bodyBox(g))) dealHit(id, g, me.move);
   }
   if (dummy && !hitVictims.has("sandbag") && overlap(box, bodyBox(dummy))) {
     hitVictims.add("sandbag");
-    knock(dummy, me.face * 0.22, -0.3, 9, t);
-    burst(dummy.x + 16, dummy.y + 16, 6, MID);
-    sound.clang(0.4);
+    applyKnock(dummy, me.move, me.face, t < myHammerUntil);
+    burstAt(dummy.x + F_W / 2, dummy.y + F_H / 2, 8, MID);
+    freezeUntil = t + HITPAUSE;
+    shake = Math.max(shake, 4);
+    sound.clang(0.5 + me.move * 0.12);
   }
 }
 
-// --- render -------------------------------------------------------------------
-function drawSprite(map, x, y, color, flip = false) {
+// --- hammer item (seeded, shared by the room) ---------------------------------------
+function updateHammer(t) {
+  const rt = roomT();
+  if (!hammer) {
+    // find the current scheduled hammer window
+    for (let k = Math.max(0, Math.floor((rt - 30000) / 28000)); k <= Math.floor(rt / 28000) + 1; k++) {
+      if (claimedHammers.has(k)) continue;
+      const spawnT = 20000 + k * 28000 + seededRnd(k) * 9000;
+      if (rt >= spawnT && rt < spawnT + 12000) {
+        const plat = platforms()[Math.floor(seededRnd(k + 7) * platforms().length)];
+        const x = plat.l + 20 + seededRnd(k + 13) * (plat.r - plat.l - 40);
+        hammer = { k, x, y: plat.y - 26, spawnT };
+        sound.blip(1568, 0.3, 0.06); sound.blip(2093, 0.4, 0.05);
+        break;
+      }
+    }
+  } else {
+    if (roomT() > hammer.spawnT + 12000 || claimedHammers.has(hammer.k)) { hammer = null; return; }
+    if (Math.random() < 0.05) sparks.push({ x: hammer.x + 12, y: hammer.y, vx: 0, vy: -0.03, life: 0.7, color: GHOST });
+    // pickup
+    if (overlap(bodyBox(me), { l: hammer.x - 6, r: hammer.x + 30, t: hammer.y - 10, b: hammer.y + 24 })) {
+      claimedHammers.add(hammer.k);
+      sendFn({ item: { k: hammer.k } });
+      myHammerUntil = nowMs() + 8000;
+      sound.blip(1046, 0.15, 0.08); sound.blip(1318, 0.25, 0.08);
+      burstAt(hammer.x + 12, hammer.y + 10, 12, INK);
+      hammer = null;
+    }
+  }
+}
+
+// --- particles ------------------------------------------------------------------------
+function burstAt(x, y, n, color) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    sparks.push({ x, y, vx: Math.cos(a) * 0.2, vy: Math.sin(a) * 0.2 - 0.06, life: 1, color });
+  }
+}
+function puffDust(x, y, n) {
+  for (let i = 0; i < n; i++) {
+    dust.push({ x: x + (Math.random() - 0.5) * 16, y: y - 2, vx: (Math.random() - 0.5) * 0.08, vy: -0.02 - Math.random() * 0.04, life: 1 });
+  }
+}
+
+// --- drawing ----------------------------------------------------------------------------
+function drawSprite(map, x, y, color, flip = false, cell = CELL) {
   cx.fillStyle = color;
   const w = map[0].length;
   for (let r = 0; r < map.length; r++) {
     for (let c = 0; c < map[r].length; c++) {
       if (map[r][c] === "#") {
         const col = flip ? w - 1 - c : c;
-        cx.fillRect(Math.round(x + col * CELL), Math.round(y + r * CELL), CELL, CELL);
+        cx.fillRect(x + col * cell, y + r * cell, cell, cell);
       }
     }
   }
 }
 
-function drawFighter(f, id, color, t, label, dmg) {
-  const blink = t < f.invulnUntil && Math.floor(t / 100) % 2;
-  if (blink) return;
-  const body = GOLEM_BODIES[hashId(id) % 3];
-  const legs = Math.abs(f.vx) > 0.02 && f.vy === 0 ? (Math.floor(t / 100) % 2 ? LEGS_A : LEGS_B) : LEGS_A;
-  drawSprite(body, f.x, f.y, color, f.face < 0);
-  drawSprite(legs, f.x, f.y + body.length * CELL, color, f.face < 0);
-  // attack slash
-  if (t < f.atkUntil) {
-    cx.fillStyle = color;
-    const ax = f.x + 16 + f.face * 24;
-    for (let i = 0; i < 4; i++) {
-      cx.fillRect(Math.round(ax + f.face * i * 2), Math.round(f.y + 6 + i * 5), 3, 3);
-    }
+function legsFor(f, t, anim) {
+  if (anim === 2 || f.vy !== 0) return LEGS_AIR;
+  if (anim === 1 || Math.abs(f.vx) > 0.05) return Math.floor(t / 90) % 2 ? LEGS_RUN1 : LEGS_RUN2;
+  return LEGS_IDLE;
+}
+
+function drawFighter(f, id, color, t, label, dmg, opts = {}) {
+  const blinkInv = t < f.invulnUntil && Math.floor(t / 100) % 2;
+  if (blinkInv) return;
+  const stunned = t < (f.stunUntil ?? 0) || opts.anim === 3;
+  const idle = !stunned && Math.abs(f.vx ?? 0) < 0.05 && (f.vy ?? 0) === 0 && t > (f.atkUntil ?? 0);
+  const bob = idle ? Math.round(Math.sin(t / 320 + (hashId(id) % 7)) * 1.5) : 0;
+  const head = HEADS[hashId(id) % 3];
+
+  cx.save();
+  cx.translate(f.x + F_W / 2, f.y + F_H / 2);
+  if (stunned) cx.rotate(0.18 * (f.face ?? 1));
+  cx.translate(-(f.x + F_W / 2), -(f.y + F_H / 2));
+
+  drawSprite(head, f.x, f.y + bob, color, f.face < 0);
+  drawSprite(TORSO, f.x, f.y + 16 + bob, color, f.face < 0);
+  drawSprite(legsFor(f, t, opts.anim), f.x, f.y + 32 + bob, color, f.face < 0);
+
+  // eyes (blink every ~3.4s)
+  if (!(t > blinkAt && t < blinkAt + 130 && id === myId)) {
+    cx.fillStyle = PAPER;
+    const ey = f.y + 6 + bob;
+    const e1 = f.face < 0 ? 5 : 11, e2 = f.face < 0 ? 9 : 15;
+    cx.fillRect(f.x + e1 * CELL, ey, CELL * 2, CELL * 2);
+    cx.fillRect(f.x + e2 * CELL, ey, CELL * 2, CELL * 2);
   }
-  cx.font = "8px ui-monospace, monospace";
+
+  // hammer in hand
+  if (opts.hammer) {
+    drawSprite(HAMMER, f.x + (f.face > 0 ? F_W - 6 : -18), f.y + 6, color, f.face < 0);
+  }
+
+  // attack slashes
+  const attacking = t < (f.atkUntil ?? 0);
+  if (attacking && (opts.move ?? me.move) >= 0) {
+    const m = opts.move ?? me.move;
+    cx.fillStyle = color;
+    const hx = f.x + F_W / 2 + f.face * (F_W / 2 + 8);
+    const hy = f.y + F_H / 2;
+    if (m === 0) for (let i = 0; i < 3; i++) cx.fillRect(hx + f.face * i * 6, hy - 2 + i * 2, 5, 3);
+    if (m === 1) for (let i = 0; i < 5; i++) cx.fillRect(hx + f.face * i * 7, hy - 6 + (i % 2) * 10, 6, 4);
+    if (m === 2) for (let i = 0; i < 4; i++) cx.fillRect(f.x + F_W / 2 + f.face * (6 + i * 3), f.y - 8 - i * 7, 4, 5);
+    if (m === 3) for (let i = 0; i < 3; i++) cx.fillRect(f.x + 8 + i * 12, f.y + F_H + 4, 6, 4);
+  }
+  cx.restore();
+
+  cx.font = "11px ui-monospace, monospace";
   cx.textAlign = "center";
   cx.fillStyle = color;
-  cx.fillText(`${label} ${Math.floor(dmg)}%`, f.x + 16, f.y - 5);
+  cx.fillText(`${label} ${Math.floor(dmg)}%`, f.x + F_W / 2, f.y - 8);
 }
 
 function drawStage() {
   cx.fillStyle = INK;
-  cx.fillRect(MAIN.l, MAIN.y, MAIN.r - MAIN.l, 2);
-  for (let x = MAIN.l + 6; x < MAIN.r - 6; x += 24) {
-    cx.fillRect(x, MAIN.y + 5 + (x % 3), 3, 1);
-    cx.fillRect(x + 11, MAIN.y + 9 + (x % 2), 2, 1);
+  cx.fillRect(MAIN.l, MAIN.y, MAIN.r - MAIN.l, 3);
+  for (let x = MAIN.l + 8; x < MAIN.r - 8; x += 26) {
+    cx.fillRect(x, MAIN.y + 7 + (x % 4), 4, 2);
+    cx.fillRect(x + 13, MAIN.y + 12 + (x % 3), 3, 2);
   }
-  cx.globalAlpha = 0.55;
+  cx.globalAlpha = 0.5;
   for (const c of CLOUDS) {
-    for (let x = c.l; x < c.r - 12; x += 24) drawSprite(CLOUD_TEX, x, c.y - 4, GHOST);
+    for (let x = c.l; x < c.r - 20; x += 30) drawSprite(CLOUD_TEX, x, c.y - 5, GHOST);
   }
   cx.globalAlpha = 1;
 }
 
-// --- main loop ------------------------------------------------------------------
+function drawHud(t) {
+  const others = [...ghosts.entries()].filter(([, g]) => t - g.seen < 5000);
+  const cards = [[myId, "YOU", me.dmg, INK, t < myHammerUntil], ...others.map(([id, g]) =>
+    [id, (names[id] ?? "?").toUpperCase().slice(0, 8), g.dmg, GHOST, g.hammer])];
+  if (dummy) cards.push(["sandbag", "SANDBAG", dummy.dmg, MID, false]);
+  const cw = 108, total = cards.length * cw + (cards.length - 1) * 10;
+  let x = (W - total) / 2;
+  for (const [, label, dmg, color, hasHammer] of cards) {
+    cx.strokeStyle = color;
+    cx.globalAlpha = 0.9;
+    cx.strokeRect(x + 0.5, H - 34.5, cw, 26);
+    cx.globalAlpha = 1;
+    cx.fillStyle = color;
+    cx.textAlign = "left";
+    cx.font = "10px ui-monospace, monospace";
+    cx.fillText((hasHammer ? "⚒ " : "") + label, x + 8, H - 23);
+    cx.textAlign = "right";
+    cx.font = "13px ui-monospace, monospace";
+    cx.fillText(`${Math.floor(dmg)}%`, x + cw - 8, H - 15);
+    x += cw + 10;
+  }
+}
+
+// --- main loop -----------------------------------------------------------------------------
 function frame(ts) {
   const t = nowMs();
   const dt = Math.min(40, ts - (lastTick || ts - 16));
   lastTick = ts;
+  const frozen = t < freezeUntil;
 
-  stepFighter(me, dt, keys);
-  if (keys.attack && !keys._atkHeld) tryAttack(t);
-  keys._atkHeld = keys.attack;
-  resolveAttack(t);
+  if (!frozen) {
+    stepFighter(me, dt, keys);
+    if (keys.attack && !keys._atkHeld) tryAttack(t);
+    keys._atkHeld = keys.attack;
+    resolveAttack(t);
+    updateHammer(t);
+  }
 
-  // sandbag appears when nobody else is around
+  if (t > blinkAt + 3400 + (hashId(myId ?? "x") % 900)) blinkAt = t;
+
+  // sandbag when alone
   const anyoneAlive = [...ghosts.values()].some((g) => t - g.seen < 5000);
-  if (!anyoneAlive && !dummy) dummy = freshFighter(300);
+  if (!anyoneAlive && !dummy) dummy = freshFighter();
   if (anyoneAlive) dummy = null;
-  if (dummy) {
+  if (dummy && !frozen) {
     stepFighter(dummy, dt, null);
     const b = bodyBox(dummy);
     if (b.l < BLAST.l || b.r > BLAST.r || b.t > BLAST.b) {
-      burst(Math.max(10, Math.min(W - 10, dummy.x)), Math.max(10, Math.min(H - 10, dummy.y)), 14, INK);
+      burstAt(Math.max(20, Math.min(W - 20, dummy.x)), Math.max(20, Math.min(H - 20, dummy.y)), 18, INK);
+      shake = Math.max(shake, 9);
       sound.ding();
-      dummy = freshFighter(300);
+      dummy = freshFighter();
     }
   }
 
-  // own KO?
+  // own KO
   const mb = bodyBox(me);
   if (mb.l < BLAST.l || mb.r > BLAST.r || mb.t > BLAST.b || mb.b < BLAST.t) {
-    const kx = Math.max(10, Math.min(W - 10, me.x));
-    const ky = Math.max(10, Math.min(H - 10, me.y));
+    const kx = Math.max(20, Math.min(W - 20, me.x)), ky = Math.max(20, Math.min(H - 20, me.y));
     sendFn({ ko: { x: kx, y: ky } });
-    burst(kx, ky, 16, INK);
-    sound.clang(1.1);
+    burstAt(kx, ky, 22, INK);
+    shake = Math.max(shake, 11);
+    sound.clang(1.2); sound.ding();
     respawn(me);
+  }
+
+  // trail while flying fast
+  if (Math.hypot(me.vx, me.vy) > 0.55) {
+    trail.push({ x: me.x, y: me.y, face: me.face, life: 1 });
+    if (trail.length > 5) trail.shift();
   }
 
   if (ts - lastSent > 100) {
     lastSent = ts;
-    sendFn({ p: [Math.round(me.x), Math.round(me.y), me.face, Math.floor(me.dmg), t < me.atkUntil ? 1 : 0] });
+    const anim = t < me.stunUntil ? 3 : t < me.atkUntil ? 2 : Math.abs(me.vx) > 0.05 ? 1 : 0;
+    sendFn({ p: [Math.round(me.x), Math.round(me.y), me.face, Math.floor(me.dmg), anim, t < myHammerUntil ? 1 : 0, me.move] });
   }
 
-  // --- draw ---
+  // --- render ---
+  shake *= 0.86;
+  const shx = (Math.random() - 0.5) * shake, shy = (Math.random() - 0.5) * shake;
+  cx.setTransform(scaleX, 0, 0, scaleY, shx * scaleX, shy * scaleY);
+  cx.clearRect(-20, -20, W + 40, H + 40);
   cx.fillStyle = PAPER;
-  cx.fillRect(0, 0, W, H);
+  cx.fillRect(-20, -20, W + 40, H + 40);
+
   drawStage();
 
+  // hammer on stage
+  if (hammer) {
+    const bobY = Math.sin(t / 250) * 3;
+    drawSprite(HAMMER, hammer.x, hammer.y + bobY, INK);
+  }
+
+  // trail afterimages
+  trail = trail.filter((p) => (p.life -= 0.08) > 0);
+  for (const p of trail) {
+    cx.globalAlpha = p.life * 0.18;
+    drawSprite(TORSO, p.x, p.y + 16, INK, p.face < 0);
+    cx.globalAlpha = 1;
+  }
+
+  // ghosts with smoothing
   for (const [id, g] of ghosts) {
     if (t - g.seen > 5000) continue;
-    const gf = { x: g.x, y: g.y, face: g.face, vx: 0, vy: 0, atkUntil: g.atk ? t + 1 : 0, invulnUntil: 0 };
-    drawFighter(gf, id, GHOST, t, (names[id] ?? "?").toUpperCase().slice(0, 8), g.dmg);
+    g.gx = g.gx === undefined ? g.x : g.gx + (g.x - g.gx) * 0.35;
+    g.gy = g.gy === undefined ? g.y : g.gy + (g.y - g.gy) * 0.35;
+    const gf = { x: g.gx, y: g.gy, face: g.face, vx: 0, vy: g.anim === 2 ? 0.1 : 0, atkUntil: g.atk ? t + 1 : 0, stunUntil: g.anim === 3 ? t + 1 : 0, invulnUntil: 0 };
+    drawFighter(gf, id, GHOST, t, (names[id] ?? "?").toUpperCase().slice(0, 8), g.dmg, { anim: g.anim, hammer: g.hammer, move: g.move });
   }
+
+  // sandbag
   if (dummy) {
-    drawSprite(SANDBAG, dummy.x + 8, dummy.y + 14, MID);
-    cx.font = "8px ui-monospace, monospace";
+    cx.save();
+    if (t < dummy.stunUntil) { cx.translate(dummy.x + 16, dummy.y + 20); cx.rotate(0.3); cx.translate(-(dummy.x + 16), -(dummy.y + 20)); }
+    drawSprite(SANDBAG, dummy.x + 6, dummy.y + 6, MID, false, 4);
+    cx.restore();
+    cx.font = "11px ui-monospace, monospace";
     cx.textAlign = "center";
     cx.fillStyle = MID;
-    cx.fillText(`SANDBAG ${Math.floor(dummy.dmg)}%`, dummy.x + 16, dummy.y + 6);
+    cx.fillText(`SANDBAG ${Math.floor(dummy.dmg)}%`, dummy.x + F_W / 2, dummy.y - 6);
   }
-  drawFighter(me, myId ?? "me", INK, t, "YOU", me.dmg);
 
-  // sparks
-  sparks = sparks.filter((s) => s.life > 0);
+  // spawn cloud while descending
+  if (me.descending && t < me.invulnUntil) {
+    cx.globalAlpha = 0.6;
+    drawSprite(CLOUD_TEX, me.x + 6, me.y + F_H + 2, GHOST);
+    cx.globalAlpha = 1;
+  }
+  drawFighter(me, myId ?? "me", INK, t, "YOU", me.dmg, { hammer: t < myHammerUntil });
+
+  // dust, sparks, rings
+  dust = dust.filter((d) => (d.life -= 0.035) > 0);
+  for (const d of dust) {
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    cx.globalAlpha = d.life * 0.5;
+    cx.fillStyle = GHOST;
+    cx.fillRect(Math.round(d.x), Math.round(d.y), 4, 4);
+  }
+  cx.globalAlpha = 1;
+  sparks = sparks.filter((s) => (s.life -= 0.03) > 0);
   for (const s of sparks) {
-    s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 0.0008 * dt; s.life -= 0.03;
+    s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 0.0009 * dt;
     cx.fillStyle = s.color;
-    cx.fillRect(Math.round(s.x), Math.round(s.y), 2, 2);
+    cx.globalAlpha = s.life;
+    cx.fillRect(Math.round(s.x), Math.round(s.y), 3, 3);
   }
+  cx.globalAlpha = 1;
+  rings = rings.filter((r) => (r.life -= 0.05) > 0);
+  for (const r of rings) {
+    r.r += 3.5;
+    cx.strokeStyle = MID;
+    cx.globalAlpha = r.life * 0.7;
+    cx.beginPath();
+    cx.ellipse(r.x, r.y, r.r, r.r * 0.3, 0, 0, Math.PI * 2);
+    cx.stroke();
+  }
+  cx.globalAlpha = 1;
 
-  cx.font = "10px ui-monospace, monospace";
-  cx.textAlign = "left";
-  cx.fillStyle = GHOST;
-  cx.fillText("a/d move · w jump ×2 · s drop · space attack", 6, 14);
+  drawHud(t);
+
+  // intro banner
+  if (t < bannerUntil) {
+    const a = Math.min(1, (bannerUntil - t) / 600);
+    cx.globalAlpha = a;
+    cx.fillStyle = INK;
+    cx.font = "26px ui-monospace, monospace";
+    cx.textAlign = "center";
+    cx.fillText("WARM-UP ARENA", W / 2, 48);
+    cx.globalAlpha = 1;
+  }
 
   raf = requestAnimationFrame(frame);
 }
 
-// --- keyboard: WASD + space attack (arrows work too) ----------------------------
+// --- keyboard: WASD + space attack (arrows as fallback) --------------------------------------
 function keydown(e) {
   if (e.target.tagName === "INPUT") return;
   if (e.code === "KeyW" || e.code === "ArrowUp") { keys.jump = true; e.preventDefault(); }
@@ -335,51 +615,91 @@ function keyup(e) {
   if (e.code === "Space") keys.attack = false;
 }
 
-// --- public API (unchanged) ---------------------------------------------------------
+function resizeBacking() {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(rect.width * dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * dpr));
+  scaleX = canvas.width / W;
+  scaleY = canvas.height / H;
+}
+
+// --- public API (unchanged) --------------------------------------------------------------------
 export const Warmup = {
   init(send) { sendFn = send; },
 
   setRoom(state, myPlayerId) {
     myId = myPlayerId;
+    epoch = state.epoch ?? 0;
+    if (state.now) clockOffset = state.now - Date.now();
     names = Object.fromEntries(state.players.map((p) => [p.id, p.name]));
   },
 
   receive(data, from) {
     const t = nowMs();
     if (data.p) {
-      ghosts.set(from, { x: data.p[0], y: data.p[1], face: data.p[2], dmg: data.p[3], atk: !!data.p[4], seen: t });
-    } else if (data.atk) {
+      const prev = ghosts.get(from) ?? {};
+      ghosts.set(from, {
+        ...prev,
+        x: data.p[0], y: data.p[1], face: data.p[2], dmg: data.p[3],
+        anim: data.p[4], hammer: !!data.p[5], move: data.p[6], seen: t,
+      });
+    } else if (data.atk !== undefined) {
       const g = ghosts.get(from);
-      if (g) { g.atk = true; setTimeout(() => { g.atk = false; }, ATK_MS); }
+      if (g) {
+        g.atk = true; g.move = data.atk;
+        setTimeout(() => { g.atk = false; }, MOVES[data.atk]?.dur ?? 120);
+      }
+      sound.blip(280, 0.05, 0.025, "sawtooth");
     } else if (data.hit && data.hit.to === myId) {
       if (t < me.invulnUntil) return;
-      knock(me, data.hit.kx, data.hit.ky, data.hit.dmg, t);
-      burst(me.x + 16, me.y + 16, 6, INK);
-      sound.clang(0.45);
+      applyKnock(me, data.hit.m, data.hit.dir, !!data.hit.boost);
+      me.diving = false;
+      burstAt(me.x + F_W / 2, me.y + F_H / 2, 8, INK);
+      freezeUntil = t + HITPAUSE;
+      shake = Math.max(shake, data.hit.boost ? 9 : 5);
+      sound.clang(data.hit.boost ? 1.3 : 0.55);
     } else if (data.ko) {
-      burst(data.ko.x ?? W / 2, data.ko.y ?? H / 2, 16, GHOST);
+      burstAt(data.ko.x ?? W / 2, data.ko.y ?? H / 2, 18, GHOST);
+      shake = Math.max(shake, 7);
       sound.ding();
+    } else if (data.item) {
+      claimedHammers.add(data.item.k);
+      if (hammer?.k === data.item.k) hammer = null;
+      const g = ghosts.get(from);
+      if (g) g.hammer = true;
     }
   },
 
   mount(slot) {
-    if (!canvas) {
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "warmup-wrap";
       canvas = document.createElement("canvas");
-      canvas.width = W; canvas.height = H;
       canvas.className = "warmup";
+      wrap.appendChild(canvas);
+      const cap = document.createElement("div");
+      cap.className = "warmup-caption";
+      cap.innerHTML = `<span>Warm-up arena</span>
+        <span class="k">A/D move · W jump ×2 · S drop · SPACE attack (+dir) · grab the ⚒</span>`;
+      wrap.appendChild(cap);
       cx = canvas.getContext("2d");
       addEventListener("keydown", keydown);
       addEventListener("keyup", keyup);
       canvas.addEventListener("pointerdown", () => {
-        if (me.jumps > 0) { me.vy = JUMP_V; me.jumps--; sound.tick(); }
+        if (me.jumps > 0) { me.vy = JUMP_V; me.jumps--; sound.blip(520, 0.09, 0.07); }
       });
+      ro = new ResizeObserver(resizeBacking);
+      ro.observe(canvas);
+      bannerUntil = nowMs() + 1800;
     }
-    if (canvas.parentElement !== slot) slot.appendChild(canvas);
+    if (wrap.parentElement !== slot) slot.appendChild(wrap);
+    resizeBacking();
     if (!raf) { lastTick = 0; raf = requestAnimationFrame(frame); }
   },
 
   unmount() {
     if (raf) { cancelAnimationFrame(raf); raf = null; }
-    canvas?.remove();
+    wrap?.remove();
   },
 };

@@ -93,6 +93,16 @@ export const sound = {
     f.connect(envGain(ctx, t, 0.2, 0.4));
     noise.start(t);
   },
+  // generic one-shot for game SFX
+  blip(freq = 600, decay = 0.1, peak = 0.1, type = "square") {
+    if (muted) return;
+    const ctx = ac(), t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = type;
+    o.frequency.value = freq;
+    o.connect(envGain(ctx, t, peak, decay));
+    o.start(t); o.stop(t + decay);
+  },
 };
 
 // --- particles: one shared canvas ---------------------------------------
