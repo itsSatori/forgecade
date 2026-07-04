@@ -1,4 +1,26 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The project .env wins over inherited shell env (node --env-file does not
+// override existing variables, which bites inside IDE/agent environments).
+function loadDotenv() {
+  const path = join(dirname(dirname(fileURLToPath(import.meta.url))), ".env");
+  const out = {};
+  try {
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      if (line.trim().startsWith("#")) continue;
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (m) out[m[1]] = m[2];
+    }
+  } catch {
+    // no .env — fall back to the inherited environment
+  }
+  return out;
+}
+
+const cfg = { ...process.env, ...loadDotenv() };
 
 const SYSTEM_PROMPT = `You are the game generator of Forgecade, a self-hosted AI party game.
 A group of friends is playing together, each on their own computer. Your job:
@@ -45,7 +67,18 @@ Exactly one player has ctx.isHost === true. Structure every game like this:
   Generate shapes, colors and sounds procedurally (WebAudio welcome).
 - Show the controls on screen and make it obvious whose turn / what the goal is.
 - Include scoring or a win condition so a round has a clear end; call Forgecade.end then.
-- Keep it fun and juicy within these constraints; short rounds beat long ones.
+
+## Quality bar — this ships to a party, make it land
+
+- Open with a short title card: game name, one-line "how to play", the players' names.
+  Start the round after ~4 seconds or when the host presses a key.
+- Animate everything that moves: easing, squash-and-stretch, particles on hits,
+  screen shake on big moments. Procedural WebAudio sound effects for key actions.
+- Be FUNNY. Lean into the absurdity of the idea: silly labels, dramatic announcements,
+  ridiculous game-over messages. The group should laugh within the first 30 seconds.
+- Hide one small easter egg (a secret key, a 1-in-20 event, an absurd detail).
+- Short rounds beat long ones: 2-4 minutes, then a scoreboard with drama.
+- Readable from across the room: big type, high contrast, player colors.
 
 Output format: respond with ONLY the HTML document, starting with <!DOCTYPE html>.
 No markdown code fences, no explanation before or after.`;
@@ -90,7 +123,22 @@ Forgecade.init((ctx) => {
 });
 </script></body></html>`;
 
-const client = process.env.FORGECADE_FAKE_GENERATOR ? null : new Anthropic();
+const MODEL = cfg.FORGECADE_MODEL ?? "claude-opus-4-8";
+const FAKE = Boolean(cfg.FORGECADE_FAKE_GENERATOR);
+
+const client = FAKE
+  ? null
+  : new Anthropic({
+      baseURL: cfg.ANTHROPIC_BASE_URL,
+      authToken: cfg.ANTHROPIC_AUTH_TOKEN ?? null,
+      apiKey: cfg.ANTHROPIC_AUTH_TOKEN ? null : (cfg.ANTHROPIC_API_KEY ?? null),
+    });
+
+export const generatorInfo = {
+  model: MODEL,
+  fake: FAKE,
+  hasCredentials: Boolean(cfg.ANTHROPIC_AUTH_TOKEN || cfg.ANTHROPIC_API_KEY),
+};
 
 // Strips markdown fences in case the model wraps the document anyway.
 function extractHtml(text) {
@@ -104,7 +152,7 @@ function extractHtml(text) {
 }
 
 export async function generateGame(idea, { onProgress } = {}) {
-  if (process.env.FORGECADE_FAKE_GENERATOR) {
+  if (FAKE) {
     for (let i = 1; i <= 3; i++) {
       await new Promise((r) => setTimeout(r, 1000));
       onProgress?.(i * 1000);
@@ -112,13 +160,15 @@ export async function generateGame(idea, { onProgress } = {}) {
     return FAKE_GAME;
   }
 
-  const stream = client.messages.stream({
-    model: "claude-opus-4-8",
+  const request = {
+    model: MODEL,
     max_tokens: 64000,
-    thinking: { type: "adaptive" },
     system: SYSTEM_PROMPT,
     messages: [{ role: "user", content: `Game idea: ${idea}` }],
-  });
+  };
+  // adaptive thinking is Claude-specific; compat APIs (e.g. GLM) reject it
+  if (MODEL.startsWith("claude")) request.thinking = { type: "adaptive" };
+  const stream = client.messages.stream(request);
 
   let chars = 0;
   stream.on("text", (delta) => {

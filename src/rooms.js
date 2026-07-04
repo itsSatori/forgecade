@@ -213,7 +213,19 @@ function handleClose(room, player) {
     room.reaper.unref();
     return;
   }
-  if (!alive.some((p) => p.id === room.hostId)) room.hostId = alive[0].id;
+  // Host-Wechsel erst nach Karenzzeit — ein Seiten-Reload soll die
+  // Host-Rolle nicht kosten (Rejoin kommt typischerweise in <5s zurück).
+  if (player.id === room.hostId) {
+    clearTimeout(room.hostGrace);
+    room.hostGrace = setTimeout(() => {
+      const stillAlive = connectedPlayers(room);
+      if (stillAlive.length > 0 && !stillAlive.some((p) => p.id === room.hostId)) {
+        room.hostId = stillAlive[0].id;
+        sync(room);
+      }
+    }, 5000);
+    room.hostGrace.unref();
+  }
   sync(room);
 }
 

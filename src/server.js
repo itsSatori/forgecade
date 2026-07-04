@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, normalize, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachRooms } from "./rooms.js";
+import { generatorInfo } from "./generator.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const GAMES_DIR = join(ROOT, "games");
@@ -15,7 +16,9 @@ const HOST = process.env.FORGECADE_HOST ?? "127.0.0.1";
 const MIME = {
   ".html": "text/html",
   ".js": "text/javascript",
+  ".css": "text/css",
   ".json": "application/json",
+  ".svg": "image/svg+xml",
 };
 
 // Generated games are untrusted LLM output. The sandbox CSP gives them an
@@ -84,8 +87,8 @@ const server = createServer(async (req, res) => {
       return await sendFile(res, join(PUBLIC_DIR, "index.html"));
     }
 
-    if (req.method === "GET" && path === "/forgecade-sdk.js") {
-      return await sendFile(res, join(PUBLIC_DIR, "forgecade-sdk.js"));
+    if (req.method === "GET" && /^\/[\w.-]+\.(js|css)$/.test(path)) {
+      return await sendFrom(res, PUBLIC_DIR, path.slice(1));
     }
 
     if (req.method === "GET" && path === "/api/games") {
@@ -110,11 +113,11 @@ attachRooms(server, GAMES_DIR);
 
 server.listen(PORT, HOST, () => {
   console.log(`[forgecade] running on http://${HOST}:${PORT}`);
-  if (process.env.FORGECADE_FAKE_GENERATOR) {
+  if (generatorInfo.fake) {
     console.log("[forgecade] FAKE GENERATOR active — no API calls will be made");
-  } else if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn(
-      "[forgecade] warning: ANTHROPIC_API_KEY is not set — generation will fail",
-    );
+  } else if (!generatorInfo.hasCredentials) {
+    console.warn("[forgecade] warning: no API credentials — generation will fail");
+  } else {
+    console.log(`[forgecade] generator model: ${generatorInfo.model}`);
   }
 });

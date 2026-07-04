@@ -1,0 +1,246 @@
+/* Forgecade — Even OS 2.0 design language (Even Realities guidelines) */
+:root {
+  --paper: #f6f6f6;
+  --block: #eeeeee;
+  --block-2: #e4e4e4;
+  --divider: #bdbdbd;
+  --ink: #232323;
+  --sub: #7b7b7b;
+  --press: #000000;
+  --go: #4bb956;
+  --alert: #ff453a;
+  --mark: #fef991;
+  --glow: #ff9f43;
+  --sans: "FK Grotesk Neue", "Neue Haas Grotesk Text", "Helvetica Neue",
+          Helvetica, Inter, "Segoe UI", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 300 15px/1.5 var(--sans);
+  letter-spacing: -0.01em;
+  overflow-x: hidden;
+}
+#fx-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+.view, #toast, #mute { position: relative; z-index: 2; }
+
+h1, h2 {
+  font-weight: 400;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+.dim { color: var(--sub); }
+.mono { font-family: var(--mono); }
+
+/* --- scenes -------------------------------------------------------- */
+.view { display: none; max-width: 640px; margin: 0 auto; padding: 4.5rem 1.5rem 3rem; }
+.view.active { display: block; animation: scene-in .45s cubic-bezier(.2,.9,.3,1) both; }
+@keyframes scene-in { from { opacity: 0; transform: translateY(14px); } }
+
+/* --- controls ------------------------------------------------------ */
+input {
+  background: #ffffff;
+  border: 1px solid var(--block-2);
+  border-radius: 12px;
+  color: var(--ink);
+  padding: .85rem 1.1rem;
+  font: 300 17px/1.4 var(--sans);
+  letter-spacing: -0.02em;
+  width: 100%;
+}
+input::placeholder { color: var(--sub); }
+input:focus { outline: 2px solid var(--ink); outline-offset: -1px; }
+button {
+  font: 400 15px/1 var(--sans);
+  letter-spacing: -0.01em;
+  background: var(--ink);
+  border: 0;
+  border-radius: 12px;
+  color: #ffffff;
+  padding: .9rem 1.5rem;
+  cursor: pointer;
+  transition: background .12s, transform .08s;
+}
+button:hover { background: #3a3a3a; }
+button:active { background: var(--press); transform: scale(.985); }
+button:disabled { opacity: .4; cursor: default; }
+button.ghost { background: var(--block-2); color: var(--ink); }
+button.ghost:hover { background: var(--divider); }
+button.go { background: var(--go); color: #ffffff; }
+button.go:hover { background: #3fa64a; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.row { display: flex; gap: .6rem; margin-bottom: .8rem; }
+.center { text-align: center; }
+
+/* --- home ----------------------------------------------------------- */
+#logo { display: block; width: min(300px, 72%); margin: 0 auto .8rem; cursor: pointer; }
+#logo .hammer-group { transform-origin: 200px 74px; }
+#logo:hover .hammer-group { animation: logo-strike .5s ease-in-out; }
+@keyframes logo-strike {
+  0%, 100% { transform: rotate(0deg); }
+  35% { transform: rotate(-38deg); }
+  55% { transform: rotate(8deg); }
+}
+.wordmark {
+  text-align: center;
+  font-size: clamp(34px, 7vw, 48px);
+  font-weight: 300;
+  letter-spacing: -0.045em;
+}
+.wordmark em { font-style: normal; color: var(--go); }
+.tagline {
+  text-align: center;
+  color: var(--sub);
+  font-size: 15px;
+  margin: .2rem 0 3rem;
+}
+
+/* --- lobby ----------------------------------------------------------- */
+.plates { display: flex; justify-content: center; gap: .6rem; margin: 2rem 0; }
+.plate {
+  font-family: var(--mono);
+  font-size: 34px;
+  background: var(--block-2);
+  border-radius: 14px;
+  padding: .55rem 1.1rem;
+  color: var(--ink);
+  animation: plate-in .5s cubic-bezier(.2,1.4,.4,1) both;
+}
+.plate:nth-child(2) { animation-delay: .07s; }
+.plate:nth-child(3) { animation-delay: .14s; }
+.plate:nth-child(4) { animation-delay: .21s; }
+@keyframes plate-in { from { opacity: 0; transform: translateY(-24px); } }
+
+.golems { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.3rem; margin: 1.6rem 0 2.6rem; }
+.golem-card { text-align: center; width: 90px; animation: scene-in .4s both; }
+.golem { width: 60px; height: 60px; animation: bob 2.6s ease-in-out infinite; }
+.golem-card:nth-child(2n) .golem { animation-delay: -1.3s; }
+.golem-card:nth-child(3n) .golem { animation-delay: -0.7s; }
+@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.golem-card .pname {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.golem-card.off { opacity: .35; }
+.golem-card.host .pname::before { content: "⚒ "; color: var(--sub); }
+.tip { min-height: 1.6em; transition: opacity .4s; font-size: 13px; }
+
+/* --- idea round ------------------------------------------------------ */
+.fuse { height: 4px; background: var(--block-2); border-radius: 2px; margin: 1.2rem 0 2.2rem; overflow: hidden; }
+.fuse > div {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  background: var(--ink);
+  transition: width .25s linear, background .3s;
+}
+.big-timer { font-size: 60px; font-weight: 300; letter-spacing: -0.03em; text-align: center; }
+.big-timer.hurry { color: var(--alert); animation: pulse .5s infinite; }
+.big-timer.hurry + .fuse > div { background: var(--alert); }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+.locked-card {
+  background: var(--block);
+  border-radius: 14px;
+  padding: 1.1rem 1.2rem;
+  position: relative;
+  font-size: 17px;
+  animation: stamp .35s cubic-bezier(.2,1.6,.4,1) both;
+}
+.locked-card::after {
+  content: "In the fire";
+  position: absolute; top: -10px; right: 14px;
+  font-size: 11px; font-weight: 400; letter-spacing: -0.01em;
+  background: var(--go); color: #fff;
+  padding: .18rem .6rem; border-radius: 6px;
+}
+
+/* --- reveal / dice ---------------------------------------------------- */
+.ideas { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .55rem; margin-top: 1.6rem; }
+.ideas .card {
+  background: var(--block);
+  border-radius: 14px;
+  padding: 1rem 1.2rem;
+  font-size: 17px;
+  animation: stamp .4s cubic-bezier(.2,1.6,.4,1) both;
+  animation-delay: var(--d, 0s);
+  transition: background .15s, opacity .3s, transform .2s;
+}
+@keyframes stamp { from { opacity: 0; transform: scale(1.5); } }
+.ideas .card.chosen { background: var(--mark); transform: scale(1.02); }
+.ideas .card.dud { opacity: .38; }
+
+/* --- forge scene ------------------------------------------------------- */
+#forge-scene { display: block; width: min(360px, 82%); margin: 1.6rem auto; }
+#forge-scene .arm { transform-origin: 245px 96px; }
+#forge-scene .arm.strike { animation: strike .3s ease-in both; }
+@keyframes strike {
+  0% { transform: rotate(0deg); }
+  45% { transform: rotate(-52deg); }
+  70% { transform: rotate(6deg); }
+  100% { transform: rotate(0deg); }
+}
+#forge-scene .workpiece { filter: drop-shadow(0 0 7px rgba(255, 159, 67, .75)); }
+#forge-scene .glow { animation: breathe 2.2s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .4; } }
+.molten-bar { height: 4px; background: var(--block-2); border-radius: 2px; overflow: hidden; margin: 1.6rem 0 .8rem; }
+.molten-bar > div { height: 100%; background: var(--glow); border-radius: 2px; transition: width .8s ease; }
+.forge-line { min-height: 1.6em; font-size: 13px; transition: opacity .3s; }
+
+/* --- ready ------------------------------------------------------------- */
+.ready-halo { color: var(--go); }
+.ready-idea { font-size: 20px; letter-spacing: -0.02em; margin: 1rem 0 2.2rem; }
+
+/* --- playing ------------------------------------------------------------ */
+#view-playing { max-width: none; padding: 0; height: 100vh; height: 100dvh; flex-direction: column; }
+#view-playing.active { display: flex; }
+#topbar {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .5rem 1rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--block-2);
+  font-size: 13px;
+}
+#topbar .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); }
+#topbar button { padding: .45rem 1rem; font-size: 13px; border-radius: 9px; }
+#topbar .mini-hammer { width: 20px; height: 20px; animation: mini-strike 1s ease-in-out infinite; display: none; }
+#topbar .mini-hammer.on { display: block; }
+@keyframes mini-strike { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-35deg); } 55% { transform: rotate(6deg); } }
+#gameframe { flex: 1; border: 0; width: 100%; background: var(--ink); }
+
+/* --- toast / mute -------------------------------------------------------- */
+#toast {
+  position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%) translateY(16px);
+  background: var(--ink); color: #fff;
+  font-size: 13px; letter-spacing: -0.01em;
+  padding: .8rem 1.2rem; border-radius: 12px;
+  max-width: 90vw; z-index: 10; opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#mute {
+  position: fixed; top: .9rem; right: .9rem; z-index: 10;
+  background: var(--block-2); border-radius: 50%;
+  width: 40px; height: 40px; font-size: 15px; color: var(--ink);
+  padding: 0;
+}
+#mute:hover { background: var(--divider); }
+
+/* fire mode easter egg */
+body.fire-mode .view.active { animation: wobble .35s ease-in-out infinite; }
+@keyframes wobble { 0%,100% { transform: rotate(-.4deg); } 50% { transform: rotate(.4deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01s !important; animation-iteration-count: 1 !important; transition-duration: .01s !important; }
+}
+@media (max-width: 560px) {
+  .plates { gap: .4rem; }
+  .plate { font-size: 24px; padding: .45rem .85rem; }
+  h2 { font-size: 20px; }
+  .big-timer { font-size: 44px; }
+}
