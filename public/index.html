@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forgecade</title>
+<style>
+  :root { --bg: #12141a; --panel: #1c1f28; --accent: #f2a03d; --text: #e8e6e1; --dim: #8b8fa3; }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 16px/1.5 ui-monospace, "SF Mono", Menlo, monospace; min-height: 100vh; padding: 3rem 1.5rem; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; letter-spacing: 0.08em; }
+  h1 span { color: var(--accent); }
+  .tag { color: var(--dim); margin-bottom: 2rem; font-size: 0.85rem; }
+  form { display: flex; gap: 0.5rem; margin-bottom: 2.5rem; }
+  input { flex: 1; background: var(--panel); border: 1px solid #2c3040; color: var(--text); padding: 0.7rem 0.9rem; border-radius: 6px; font: inherit; }
+  input:focus { outline: 1px solid var(--accent); }
+  button { background: var(--accent); border: 0; color: #1a1205; font: inherit; font-weight: 700; padding: 0.7rem 1.2rem; border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  ul { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+  li { background: var(--panel); border-radius: 6px; padding: 0.8rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  li .idea { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  li a { color: var(--accent); text-decoration: none; font-weight: 700; white-space: nowrap; }
+  li .status { color: var(--dim); font-size: 0.85rem; white-space: nowrap; }
+  li.error .status { color: #e06c60; }
+  .empty { color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>FORGE<span>CADE</span></h1>
+  <p class="tag">describe a game — play it minutes later</p>
+  <form id="form">
+    <input id="idea" placeholder="e.g. sheep herding but the dog is a rocket" maxlength="500" autofocus>
+    <button id="go">Forge</button>
+  </form>
+  <ul id="list"></ul>
+  <p class="empty" id="empty">No games yet. Forge the first one.</p>
+</main>
+<script>
+const form = document.getElementById("form");
+const input = document.getElementById("idea");
+const list = document.getElementById("list");
+const empty = document.getElementById("empty");
+
+const go = document.getElementById("go");
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const idea = input.value.trim();
+  if (idea.length < 3) return;
+  go.disabled = true;
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idea }),
+    });
+    if (res.ok) { input.value = ""; refresh(); }
+    else alert((await res.json()).error ?? "generation failed");
+  } finally {
+    go.disabled = false;
+  }
+});
+
+async function refresh() {
+  const { games, pending } = await (await fetch("/api/games")).json();
+  const items = [];
+  for (const job of pending) {
+    const kb = Math.round(job.progress / 1024);
+    items.push(job.status === "error"
+      ? `<li class="error"><span class="idea">${esc(job.idea)}</span><span class="status">✗ ${esc(job.error)}</span></li>`
+      : `<li><span class="idea">${esc(job.idea)}</span><span class="status">forging… ${kb} KB</span></li>`);
+  }
+  for (const g of games) {
+    items.push(`<li><span class="idea">${esc(g.idea)}</span><a href="/games/${g.slug}/" target="_blank">▶ play</a></li>`);
+  }
+  list.innerHTML = items.join("");
+  empty.style.display = items.length ? "none" : "block";
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

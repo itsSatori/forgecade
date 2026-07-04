@@ -1,0 +1,23 @@
+{
+  "name": "forgecade",
+  "version": "0.1.0",
+  "description": "Self-hosted AI game generator",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsSatori/forgecade.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/itsSatori/forgecade/issues"
+  },
+  "homepage": "https://github.com/itsSatori/forgecade#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0"
+  }
+}
