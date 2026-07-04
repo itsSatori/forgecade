@@ -170,11 +170,12 @@ function frame() {
 requestAnimationFrame(frame);
 
 // --- avatars: procedural forge golems ------------------------------------
-function hash(str) {
+export function hashId(str) {
   let h = 2166136261;
   for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
+const hash = hashId;
 
 const SKINS = ["#232323", "#7b7b7b", "#4bb956", "#ff9f43", "#5b8db8", "#c76a5a"];
 
