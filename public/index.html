@@ -5,87 +5,330 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forgecade</title>
 <style>
-  :root { --bg: #12141a; --panel: #1c1f28; --accent: #f2a03d; --text: #e8e6e1; --dim: #8b8fa3; }
-  * { box-sizing: border-box; margin: 0; }
-  body { background: var(--bg); color: var(--text); font: 16px/1.5 ui-monospace, "SF Mono", Menlo, monospace; min-height: 100vh; padding: 3rem 1.5rem; }
-  main { max-width: 640px; margin: 0 auto; }
-  h1 { font-size: 1.6rem; letter-spacing: 0.08em; }
-  h1 span { color: var(--accent); }
-  .tag { color: var(--dim); margin-bottom: 2rem; font-size: 0.85rem; }
-  form { display: flex; gap: 0.5rem; margin-bottom: 2.5rem; }
-  input { flex: 1; background: var(--panel); border: 1px solid #2c3040; color: var(--text); padding: 0.7rem 0.9rem; border-radius: 6px; font: inherit; }
-  input:focus { outline: 1px solid var(--accent); }
-  button { background: var(--accent); border: 0; color: #1a1205; font: inherit; font-weight: 700; padding: 0.7rem 1.2rem; border-radius: 6px; cursor: pointer; }
-  button:disabled { opacity: 0.5; cursor: wait; }
-  ul { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
-  li { background: var(--panel); border-radius: 6px; padding: 0.8rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-  li .idea { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  li a { color: var(--accent); text-decoration: none; font-weight: 700; white-space: nowrap; }
-  li .status { color: var(--dim); font-size: 0.85rem; white-space: nowrap; }
-  li.error .status { color: #e06c60; }
-  .empty { color: var(--dim); }
+  :root { --bg:#12141a; --panel:#1c1f28; --accent:#f2a03d; --text:#e8e6e1; --dim:#8b8fa3; --err:#e06c60; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:16px/1.5 ui-monospace,"SF Mono",Menlo,monospace; min-height:100vh; }
+  .view { display:none; max-width:680px; margin:0 auto; padding:3rem 1.5rem; }
+  .view.active { display:block; }
+  h1 { font-size:1.6rem; letter-spacing:.08em; }
+  h1 span { color:var(--accent); }
+  .tag { color:var(--dim); margin-bottom:2rem; font-size:.85rem; }
+  input { background:var(--panel); border:1px solid #2c3040; color:var(--text); padding:.7rem .9rem; border-radius:6px; font:inherit; width:100%; }
+  input:focus { outline:1px solid var(--accent); }
+  button { background:var(--accent); border:0; color:#1a1205; font:inherit; font-weight:700; padding:.7rem 1.2rem; border-radius:6px; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:var(--panel); color:var(--text); border:1px solid #2c3040; }
+  .row { display:flex; gap:.5rem; margin-bottom:1rem; }
+  .card { background:var(--panel); border-radius:8px; padding:1rem 1.2rem; margin-bottom:.6rem; }
+  .code { font-size:2.4rem; letter-spacing:.4em; color:var(--accent); text-align:center; margin:1.5rem 0; }
+  .players { display:flex; flex-wrap:wrap; gap:.5rem; margin:1rem 0 2rem; }
+  .players .p { background:var(--panel); padding:.35rem .8rem; border-radius:999px; font-size:.85rem; }
+  .players .p.off { opacity:.4; }
+  .players .p.host::before { content:"★ "; color:var(--accent); }
+  .big-timer { font-size:3rem; text-align:center; color:var(--accent); margin:1rem 0; }
+  .ideas li { list-style:none; }
+  .ideas .card.chosen { outline:2px solid var(--accent); }
+  .center { text-align:center; }
+  .dim { color:var(--dim); }
+  .progress { height:8px; background:var(--panel); border-radius:4px; overflow:hidden; margin:1rem 0; }
+  .progress div { height:100%; background:var(--accent); transition:width .5s; }
+  /* playing layout */
+  #view-playing { max-width:none; padding:0; height:100vh; display:none; flex-direction:column; }
+  #view-playing.active { display:flex; }
+  #topbar { display:flex; align-items:center; gap:1rem; padding:.5rem 1rem; background:var(--panel); font-size:.85rem; }
+  #topbar .grow { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #gameframe { flex:1; border:0; width:100%; background:#000; }
+  #toast { position:fixed; bottom:1.2rem; left:50%; transform:translateX(-50%); background:var(--panel); border:1px solid var(--accent); padding:.7rem 1.2rem; border-radius:8px; display:none; max-width:90vw; z-index:10; }
 </style>
 </head>
 <body>
-<main>
+
+<div class="view active" id="view-home">
   <h1>FORGE<span>CADE</span></h1>
-  <p class="tag">describe a game — play it minutes later</p>
-  <form id="form">
-    <input id="idea" placeholder="e.g. sheep herding but the dog is a rocket" maxlength="500" autofocus>
-    <button id="go">Forge</button>
-  </form>
-  <ul id="list"></ul>
-  <p class="empty" id="empty">No games yet. Forge the first one.</p>
-</main>
+  <p class="tag">the party game where the games don't exist yet</p>
+  <div class="row"><input id="name" placeholder="your name" maxlength="24"></div>
+  <div class="row"><button id="create" style="width:100%">Create group</button></div>
+  <div class="row">
+    <input id="joincode" placeholder="room code" maxlength="4" style="text-transform:uppercase">
+    <button id="join" class="ghost">Join</button>
+  </div>
+</div>
+
+<div class="view" id="view-lobby">
+  <h1>FORGE<span>CADE</span></h1>
+  <p class="tag">share this code with your friends</p>
+  <div class="code" id="lobby-code"></div>
+  <div class="players" id="lobby-players"></div>
+  <div class="center">
+    <button id="start" style="display:none">Start round — everyone types an idea</button>
+    <p class="dim" id="lobby-wait" style="display:none">waiting for the host to start…</p>
+  </div>
+</div>
+
+<div class="view" id="view-submitting">
+  <h2>Your game idea!</h2>
+  <div class="big-timer" id="submit-timer"></div>
+  <div class="row" id="submit-row">
+    <input id="idea" placeholder="e.g. sumo wrestling but everyone is a fridge" maxlength="500">
+    <button id="submit-idea">Lock in</button>
+  </div>
+  <p class="dim center" id="submit-status"></p>
+</div>
+
+<div class="view" id="view-reveal">
+  <h2 class="center">The ideas are in:</h2>
+  <ul class="ideas" id="reveal-list" style="margin-top:1.5rem"></ul>
+</div>
+
+<div class="view" id="view-rolling">
+  <h2 class="center">🎲 The dice decides…</h2>
+  <ul class="ideas" id="dice-list" style="margin-top:1.5rem"></ul>
+</div>
+
+<div class="view" id="view-forging">
+  <h2 class="center">⚒️ The forge is working…</h2>
+  <p class="center dim" id="forge-idea" style="margin-top:1rem"></p>
+  <div class="progress"><div id="forge-bar" style="width:0%"></div></div>
+  <p class="center dim" id="forge-kb"></p>
+</div>
+
+<div class="view" id="view-ready">
+  <h2 class="center">✨ Game ready!</h2>
+  <p class="center" id="ready-idea" style="margin:1rem 0 2rem"></p>
+  <div class="center">
+    <button id="play" style="display:none">Play</button>
+    <p class="dim" id="ready-wait" style="display:none">waiting for the host to hit play…</p>
+  </div>
+</div>
+
+<div class="view" id="view-playing">
+  <div id="topbar">
+    <strong id="top-code"></strong>
+    <span class="grow" id="top-status"></span>
+    <button id="top-play" style="display:none">▶ next game</button>
+    <button id="top-round" class="ghost" style="display:none">new round</button>
+  </div>
+  <iframe id="gameframe" sandbox="allow-scripts"></iframe>
+</div>
+
+<div id="toast"></div>
+
 <script>
-const form = document.getElementById("form");
-const input = document.getElementById("idea");
-const list = document.getElementById("list");
-const empty = document.getElementById("empty");
+"use strict";
+const $ = (id) => document.getElementById(id);
+let ws = null, state = null, myId = null;
+let gameCtxSent = null; // slug for which init was sent
+let diceTimer = null, tick = null;
 
-const go = document.getElementById("go");
+// --- connection ---------------------------------------------------------
+function connect(onOpen) {
+  ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onopen = onOpen;
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+  ws.onclose = () => {
+    const s = session();
+    if (s) setTimeout(() => connect(() => send({ type: "rejoin", ...s })), 1000);
+  };
+}
+function send(msg) { ws?.send(JSON.stringify(msg)); }
+function session() {
+  try { return JSON.parse(sessionStorage.getItem("forgecade")); } catch { return null; }
+}
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const idea = input.value.trim();
-  if (idea.length < 3) return;
-  go.disabled = true;
-  try {
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea }),
-    });
-    if (res.ok) { input.value = ""; refresh(); }
-    else alert((await res.json()).error ?? "generation failed");
-  } finally {
-    go.disabled = false;
+function handle(msg) {
+  if (msg.type === "joined") {
+    myId = msg.playerId;
+    sessionStorage.setItem("forgecade", JSON.stringify({
+      code: msg.code, playerId: msg.playerId, token: msg.token,
+    }));
+  } else if (msg.type === "room") {
+    state = msg;
+    render();
+  } else if (msg.type === "game") {
+    $("gameframe").contentWindow?.postMessage(
+      { __forgecade: true, type: "msg", data: msg.data, from: msg.from }, "*");
+  } else if (msg.type === "toast" || msg.type === "error") {
+    toast(msg.message);
+    if (msg.type === "error") sessionStorage.removeItem("forgecade");
+  }
+}
+
+// --- rendering ----------------------------------------------------------
+function show(view) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+  $("view-" + view).classList.add("active");
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+function render() {
+  if (!state) return show("home");
+  const isHost = state.hostId === myId;
+  const phase = state.phase;
+
+  clearInterval(tick); tick = null;
+
+  if (phase === "lobby") {
+    show("lobby");
+    $("lobby-code").textContent = state.code;
+    $("lobby-players").innerHTML = playerChips();
+    $("start").style.display = isHost ? "" : "none";
+    $("lobby-wait").style.display = isHost ? "none" : "";
+  } else if (phase === "submitting") {
+    show("submitting");
+    const mine = state.submitted.includes(myId);
+    $("submit-row").style.display = mine ? "none" : "";
+    $("submit-status").textContent =
+      `${state.submitted.length}/${state.players.filter(p => p.connected).length} locked in` +
+      (mine ? " — waiting for the others…" : "");
+    tick = setInterval(() => {
+      const left = Math.max(0, Math.ceil((state.deadline - Date.now()) / 1000));
+      $("submit-timer").textContent = left;
+    }, 200);
+  } else if (phase === "reveal") {
+    show("reveal");
+    $("reveal-list").innerHTML = (state.revealed ?? [])
+      .map((i) => `<li class="card">${esc(i)}</li>`).join("");
+  } else if (phase === "rolling") {
+    show("rolling");
+    renderDice($("dice-list"));
+  } else if (phase === "forging") {
+    show("forging");
+    renderForge();
+  } else if (phase === "ready") {
+    show("ready");
+    $("ready-idea").textContent = state.readyGame?.idea ?? "";
+    $("play").style.display = isHost ? "" : "none";
+    $("ready-wait").style.display = isHost ? "none" : "";
+  } else if (phase === "playing") {
+    show("playing");
+    $("top-code").textContent = state.code;
+    renderTopbar(isHost);
+    mountGame();
+  }
+}
+
+function playerChips() {
+  return state.players.map((p) =>
+    `<span class="p ${p.connected ? "" : "off"} ${p.id === state.hostId ? "host" : ""}">${esc(p.name)}</span>`
+  ).join("");
+}
+
+function renderTopbar(isHost) {
+  let status = "";
+  if (state.rolling) status = "🎲 rolling the dice…";
+  else if (state.forging) status = `⚒️ forging: ${esc(state.forging.idea)} (${Math.round(state.forging.progress / 1024)} KB)`;
+  else if (state.readyGame) status = `✨ ready: ${esc(state.readyGame.idea)}`;
+  else if (state.queue.length) status = `${state.queue.length} idea(s) queued`;
+  $("top-status").innerHTML = status;
+  $("top-play").style.display = isHost && state.readyGame ? "" : "none";
+  const canRound = isHost && !state.forging && !state.readyGame && state.queue.length === 0;
+  $("top-round").style.display = canRound ? "" : "none";
+}
+
+function renderForge() {
+  const f = state.forging;
+  if (!f) return;
+  $("forge-idea").textContent = f.idea;
+  const kb = Math.round(f.progress / 1024);
+  $("forge-kb").textContent = `${kb} KB forged`;
+  $("forge-bar").style.width = Math.min(95, kb * 2) + "%";
+}
+
+// roulette highlight that slows down and lands on the chosen idea
+function renderDice(list) {
+  const { options, chosenIndex } = state.rolling ?? {};
+  if (!options) return;
+  list.innerHTML = options.map((i) => `<li class="card">${esc(i)}</li>`).join("");
+  const items = [...list.children];
+  clearTimeout(diceTimer);
+  let pos = 0, delay = 80;
+  const step = () => {
+    items.forEach((el, i) => el.classList.toggle("chosen", i === pos % items.length));
+    const landed = delay > 400 && pos % items.length === chosenIndex;
+    if (!landed) {
+      pos++;
+      delay = Math.min(500, delay * 1.13);
+      diceTimer = setTimeout(step, delay);
+    }
+  };
+  step();
+}
+
+// --- game iframe bridge --------------------------------------------------
+function mountGame() {
+  const frame = $("gameframe");
+  const slug = state.currentGame?.slug;
+  if (!slug) return;
+  const src = `/games/${encodeURIComponent(slug)}/`;
+  if (frame.getAttribute("src") !== src) {
+    gameCtxSent = null;
+    frame.setAttribute("src", src);
+  }
+}
+
+window.addEventListener("message", (e) => {
+  const frame = $("gameframe");
+  if (e.source !== frame.contentWindow) return;
+  const m = e.data;
+  if (!m || m.__forgecade !== true) return;
+  if (m.type === "ready") {
+    if (gameCtxSent === state.currentGame?.slug) return;
+    gameCtxSent = state.currentGame?.slug;
+    const players = state.players.filter((p) => p.connected).map((p) => ({ id: p.id, name: p.name }));
+    const me = players.find((p) => p.id === myId) ?? { id: myId, name: "?" };
+    frame.contentWindow.postMessage({
+      __forgecade: true, type: "init",
+      ctx: { players, me, isHost: state.hostId === myId },
+    }, "*");
+  } else if (m.type === "send") {
+    send({ type: "game", data: m.data });
+  } else if (m.type === "end") {
+    const scores = m.result?.scores ?? {};
+    const names = Object.fromEntries(state.players.map((p) => [p.id, p.name]));
+    const top = Object.entries(scores).sort((a, b) => b[1] - a[1])
+      .map(([id, n]) => `${names[id] ?? "?"}: ${n}`).join(" · ");
+    toast(top ? `🏁 Round over — ${top}` : "🏁 Round over");
   }
 });
 
-async function refresh() {
-  const { games, pending } = await (await fetch("/api/games")).json();
-  const items = [];
-  for (const job of pending) {
-    const kb = Math.round(job.progress / 1024);
-    items.push(job.status === "error"
-      ? `<li class="error"><span class="idea">${esc(job.idea)}</span><span class="status">✗ ${esc(job.error)}</span></li>`
-      : `<li><span class="idea">${esc(job.idea)}</span><span class="status">forging… ${kb} KB</span></li>`);
-  }
-  for (const g of games) {
-    items.push(`<li><span class="idea">${esc(g.idea)}</span><a href="/games/${g.slug}/" target="_blank">▶ play</a></li>`);
-  }
-  list.innerHTML = items.join("");
-  empty.style.display = items.length ? "none" : "block";
+// --- ui events -----------------------------------------------------------
+let toastTimer = null;
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = "none"; }, 5000);
 }
 
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
+$("create").onclick = () => {
+  const name = $("name").value.trim();
+  if (!name) return toast("Pick a name first");
+  connect(() => send({ type: "create", name }));
+};
+$("join").onclick = () => {
+  const name = $("name").value.trim();
+  const code = $("joincode").value.trim().toUpperCase();
+  if (!name) return toast("Pick a name first");
+  if (code.length !== 4) return toast("Room codes have 4 letters");
+  connect(() => send({ type: "join", code, name }));
+};
+$("start").onclick = () => send({ type: "start_round" });
+$("top-round").onclick = () => send({ type: "start_round" });
+$("play").onclick = () => send({ type: "play_next" });
+$("top-play").onclick = () => send({ type: "play_next" });
+$("submit-idea").onclick = () => {
+  const text = $("idea").value.trim();
+  if (text.length < 3) return toast("A bit more detail, maybe?");
+  send({ type: "idea", text });
+  $("idea").value = "";
+};
+$("idea").addEventListener("keydown", (e) => { if (e.key === "Enter") $("submit-idea").click(); });
 
-refresh();
-setInterval(refresh, 3000);
+// resume session after reload
+const saved = session();
+if (saved) connect(() => send({ type: "rejoin", ...saved }));
 </script>
 </body>
 </html>

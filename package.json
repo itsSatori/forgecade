@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "description": "Self-hosted AI game generator",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "dev": "FORGECADE_FAKE_GENERATOR=1 node src/server.js"
   },
   "repository": {
     "type": "git",
@@ -18,6 +19,7 @@
   },
   "homepage": "https://github.com/itsSatori/forgecade#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0"
+    "@anthropic-ai/sdk": "^0.110.0",
+    "ws": "^8.21.0"
   }
 }
