@@ -242,9 +242,22 @@ function handleClose(room, player) {
 export function attachRooms(server, gamesDir) {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
+  // keepalive: keeps idle sockets alive through reverse proxies and
+  // terminates dead clients (which triggers the normal close handling)
+  const pinger = setInterval(() => {
+    for (const client of wss.clients) {
+      if (client.isAlive === false) { client.terminate(); continue; }
+      client.isAlive = false;
+      client.ping();
+    }
+  }, 30_000);
+  pinger.unref();
+
   wss.on("connection", (ws) => {
     let room = null;
     let player = null;
+    ws.isAlive = true;
+    ws.on("pong", () => { ws.isAlive = true; });
 
     ws.on("message", (raw) => {
       let msg;
