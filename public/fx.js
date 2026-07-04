@@ -167,12 +167,14 @@ function frame() {
     p.y += p.vy;
     if (p.grav) p.vy += p.grav;
     p.life -= p.fade;
+    const radius = p.r * Math.max(0, p.life);
+    if (radius <= 0) continue;
     const alpha = Math.max(0, p.life) * 0.9;
     cx.fillStyle = p.hot
       ? `rgba(255,159,67,${alpha})`
       : `rgba(123,123,123,${alpha * 0.35})`;
     cx.beginPath();
-    cx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    cx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     cx.fill();
   }
   requestAnimationFrame(frame);

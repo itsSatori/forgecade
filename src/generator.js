@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import vm from "node:vm";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -151,20 +152,27 @@ function extractHtml(text) {
   return html;
 }
 
-export async function generateGame(idea, { onProgress } = {}) {
-  if (FAKE) {
-    for (let i = 1; i <= 3; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
-      onProgress?.(i * 1000);
+// LLMs occasionally emit broken JS — syntax-check every inline script so a
+// party never gets a game that dies on load. Throws with the parser message.
+function validateGameHtml(html) {
+  const scripts = html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi);
+  for (const [, attrs, code] of scripts) {
+    if (/type\s*=\s*["']?module/i.test(attrs)) continue; // vm.Script can't parse modules
+    if (!code.trim()) continue;
+    try {
+      new vm.Script(code);
+    } catch (err) {
+      throw new Error(`generated JS is broken: ${err.message}`);
     }
-    return FAKE_GAME;
   }
+}
 
+async function requestGame(messages, onProgress) {
   const request = {
     model: MODEL,
     max_tokens: 64000,
     system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `Game idea: ${idea}` }],
+    messages,
   };
   // adaptive thinking is Claude-specific; compat APIs (e.g. GLM) reject it
   if (MODEL.startsWith("claude")) request.thinking = { type: "adaptive" };
@@ -185,4 +193,39 @@ export async function generateGame(idea, { onProgress } = {}) {
     .map((block) => block.text)
     .join("");
   return extractHtml(text);
+}
+
+export async function generateGame(idea, { onProgress } = {}) {
+  if (FAKE) {
+    for (let i = 1; i <= 3; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      onProgress?.(i * 1000);
+    }
+    validateGameHtml(FAKE_GAME);
+    return FAKE_GAME;
+  }
+
+  const base = [{ role: "user", content: `Game idea: ${idea}` }];
+  const html = await requestGame(base, onProgress);
+  try {
+    validateGameHtml(html);
+    return html;
+  } catch (err) {
+    console.warn(`[forgecade] validation failed (${err.message}) — repair round`);
+    const repaired = await requestGame(
+      [
+        ...base,
+        { role: "assistant", content: html },
+        {
+          role: "user",
+          content: `Your game does not run — ${err.message}. ` +
+            `Output the complete corrected HTML document: same game, fixed code. ` +
+            `Same output rules: respond with ONLY the HTML document, no fences, no explanation.`,
+        },
+      ],
+      onProgress,
+    );
+    validateGameHtml(repaired); // still broken → forge-failed path handles it
+    return repaired;
+  }
 }
