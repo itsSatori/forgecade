@@ -78,8 +78,9 @@ To play with remote friends, run it on a box they can reach and set
 - [x] Pipeline: next game forges while the current one is played
 - [x] Forgecade SDK: fixed multiplayer bridge for generated games
 - [x] Demo mode (`npm run dev`) — no API key needed
+- [x] Warm-up runner: a pixel mini game in every waiting moment — same seeded
+      obstacle course for the whole room, bounce off each other's heads
 - [ ] Tune the generator prompt on real games (playtesting!)
-- [ ] Warm-up mini-games for round one (while the first forge runs)
 - [ ] Scoreboard across rounds
 - [ ] Game archive: replay the best forged games from past nights
 - [ ] Godot HTML5 pipeline for game types that outgrow the browser canvas

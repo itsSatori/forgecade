@@ -35,6 +35,8 @@ function slugify(idea) {
 function snapshot(room) {
   return {
     type: "room",
+    now: Date.now(),
+    epoch: room.createdAt,
     code: room.code,
     hostId: room.hostId,
     phase: room.phase,
@@ -182,6 +184,14 @@ const handlers = {
       if (p.id !== player.id) p.ws?.send(json);
     }
   },
+
+  // separate channel for the built-in warm-up mini game (lobby / waiting)
+  warmup(room, player, msg) {
+    const json = JSON.stringify({ type: "warmup", data: msg.data, from: player.id });
+    for (const p of room.players.values()) {
+      if (p.id !== player.id) p.ws?.send(json);
+    }
+  },
 };
 
 function joinRoom(room, ws, name) {
@@ -248,6 +258,7 @@ export function attachRooms(server, gamesDir) {
         if (msg.type === "create") {
           room = {
             code: makeCode(),
+            createdAt: Date.now(),
             gamesDir,
             players: new Map(),
             hostId: null,

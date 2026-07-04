@@ -231,6 +231,17 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 }
 #mute:hover { background: var(--divider); }
 
+/* --- warm-up mini game ---------------------------------------------------- */
+.warmup-slot { margin-top: 2rem; }
+.warmup-slot:empty { display: none; }
+canvas.warmup {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+  border-top: 1px solid var(--block-2);
+  border-bottom: 1px solid var(--block-2);
+}
+
 /* fire mode easter egg */
 body.fire-mode .view.active { animation: wobble .35s ease-in-out infinite; }
 @keyframes wobble { 0%,100% { transform: rotate(-.4deg); } 50% { transform: rotate(.4deg); } }

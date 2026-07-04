@@ -1,4 +1,7 @@
 import { sound, burst, fireMode, avatarSVG } from "/fx.js";
+import { Warmup } from "/warmup.js";
+
+Warmup.init((data) => send({ type: "warmup", data }));
 
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -62,6 +65,8 @@ function handle(msg) {
   } else if (msg.type === "game") {
     $("gameframe").contentWindow?.postMessage(
       { __forgecade: true, type: "msg", data: msg.data, from: msg.from }, "*");
+  } else if (msg.type === "warmup") {
+    Warmup.receive(msg.data, msg.from);
   } else if (msg.type === "toast" || msg.type === "error") {
     toast(msg.message);
     if (msg.type === "error") sessionStorage.removeItem("forgecade");
@@ -94,6 +99,13 @@ function render() {
   else if (phase === "forging") renderForging(entered);
   else if (phase === "ready") renderReady(isHost, entered);
   else if (phase === "playing") renderPlaying(isHost, entered);
+
+  // warm-up runner fills every waiting moment
+  Warmup.setRoom(state, myId);
+  if (phase === "lobby") Warmup.mount($("wslot-lobby"));
+  else if (phase === "submitting" && state.submitted.includes(myId)) Warmup.mount($("wslot-submitting"));
+  else if (phase === "forging") Warmup.mount($("wslot-forging"));
+  else Warmup.unmount();
 }
 
 function renderLobby(isHost, entered) {
