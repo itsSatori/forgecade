@@ -1,4 +1,4 @@
-import { sound, burst, fireMode, avatarSVG, hashId } from "/fx.js";
+import { sound, burst, fireMode, avatarSVG, hashId, colorFor, forgeHeroSVG, forgeSceneSVG, dieSVG } from "/fx.js";
 import { Warmup } from "/warmup.js";
 
 Warmup.init((data) => send({ type: "warmup", data }));
@@ -20,9 +20,7 @@ let gameEndTimer = null;
 let spectatingSlug = null, freshJoin = false;
 let playFlipTimer = null, lastReadySince = null;
 
-// fixed palette for in-game player identity (V4) — bold enough for games
-const PALETTE = ["#4bb956", "#ff453a", "#ff9f43", "#5b8db8", "#c76a5a", "#8a63c2", "#2f9e8f", "#b58900"];
-const colorFor = (id) => PALETTE[hashId(String(id)) % PALETTE.length];
+// player identity colors live in fx.js (shared with the pixel avatars)
 const serverNow = () => Date.now() + clockOffset;
 const nameOf = (id) => state?.players.find((p) => p.id === id)?.name;
 const roster = () => state.players.filter((p) => p.connected)
@@ -656,6 +654,11 @@ $("top-skip").onclick = () => send({ type: "skip_game" });
 $("reforge").onclick = () => send({ type: "discard_ready" });
 $("cancel-forge").onclick = () => send({ type: "cancel_forge" });
 $("top-douse").onclick = () => send({ type: "cancel_forge" });
+
+// the pixel scenes are generated from maps in fx.js, not hand-written markup
+$("logo").innerHTML = forgeHeroSVG();
+$("forge-scene").innerHTML = forgeSceneSVG();
+$("die-slot").innerHTML = dieSVG();
 $("top-endnight").onclick = () => send({ type: "end_night" });
 $("top-leave").onclick = leaveRoom;
 $("leave-lobby").onclick = leaveRoom;

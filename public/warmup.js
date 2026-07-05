@@ -3,7 +3,7 @@
 // (DPR-aware), four distinct attacks, seeded random item spawns shared by
 // the whole room, animated pixel golems, hitpause, screen shake, dust.
 // Everyone waiting fights on the same stage. Alone? You get a sandbag.
-import { sound, hashId } from "/fx.js";
+import { sound, hashId, colorFor, GOLEM_HEADS, GOLEM_TORSO } from "/fx.js";
 
 // logical coordinate space (canvas backing scales with element size × DPR)
 const W = 720, H = 300, CELL = 2;
@@ -33,49 +33,10 @@ const MOVES = [
   { dmg: 13, kx: 0.18, ky: -0.55, cd: 600, dur: 400, reach: 30, up: 20 },
 ];
 
-// --- pixel art (22-wide golems, head variant = lobby avatar hash) -------------
-const HEADS = [
-  [ // round helm
-    ".......########.......",
-    ".....############.....",
-    "....##############....",
-    "...################...",
-    "...################...",
-    "...################...",
-    "...################...",
-    "....##############....",
-  ],
-  [ // bucket
-    "...################...",
-    "...################...",
-    "...################...",
-    "...################...",
-    "...################...",
-    "....##############....",
-    ".....############.....",
-    ".....############.....",
-  ],
-  [ // pot with brim
-    ".........####.........",
-    ".......########.......",
-    ".....############.....",
-    "...################...",
-    "...################...",
-    "..##################..",
-    "...################...",
-    "....##############....",
-  ],
-];
-const TORSO = [
-  ".....############.....",
-  "......##########......",
-  "......##########......",
-  ".....############.....",
-  "....##############....",
-  "....##############....",
-  ".....############.....",
-  "......##########......",
-];
+// --- pixel art: golem head/torso live in fx.js — the lobby avatar and the
+// warm-up fighter are literally the same sprite -------------------------------
+const HEADS = GOLEM_HEADS;
+const TORSO = GOLEM_TORSO;
 const LEGS_IDLE = [
   "......###....###......",
   "......###....###......",
@@ -375,6 +336,10 @@ function drawFighter(f, id, color, t, label, dmg, opts = {}) {
   drawSprite(head, f.x, f.y + bob, color, f.face < 0);
   drawSprite(TORSO, f.x, f.y + 16 + bob, color, f.face < 0);
   drawSprite(legsFor(f, t, opts.anim), f.x, f.y + 32 + bob, color, f.face < 0);
+
+  // forge core in the player's game color — same identity as the lobby card
+  cx.fillStyle = colorFor(id);
+  cx.fillRect(f.x + (f.face < 0 ? 9 : 10) * CELL, f.y + 16 + 3 * CELL + bob, 3 * CELL, 2 * CELL);
 
   // eyes (blink every ~3.4s)
   if (!(t > blinkAt && t < blinkAt + 130 && id === myId)) {

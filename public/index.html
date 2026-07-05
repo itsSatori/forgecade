@@ -10,7 +10,7 @@
 <meta property="og:url" content="https://forgecade.com/">
 <meta property="og:image" content="https://forgecade.com/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='%23232323'%3E%3Cpath d='M4 22 Q2 10 18 9 L42 9 Q56 9 62 3 Q64 14 52 21 Q44 25 34 25 L15 25 Q7 25 4 22 Z'/%3E%3Cpath d='M20 25 L26 44 L38 44 L44 25 Z'/%3E%3Crect x='14' y='44' width='36' height='10' rx='3'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 13' shape-rendering='crispEdges'%3E%3Cg fill='%23232323'%3E%3Crect x='4' y='0' width='13' height='1'/%3E%3Crect x='1' y='1' width='16' height='1'/%3E%3Crect x='0' y='2' width='17' height='1'/%3E%3Crect x='5' y='3' width='8' height='2'/%3E%3Crect x='6' y='5' width='6' height='2'/%3E%3Crect x='5' y='7' width='8' height='1'/%3E%3Crect x='4' y='8' width='10' height='2'/%3E%3Crect x='3' y='10' width='12' height='1'/%3E%3C/g%3E%3Crect x='7' y='3' width='4' height='1' fill='%23ff9f43'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -19,31 +19,8 @@
 
 <!-- HOME ------------------------------------------------------------- -->
 <div class="view active" id="view-home">
-  <svg id="logo" viewBox="0 0 400 170" role="img" aria-label="Forgecade anvil">
-    <ellipse cx="200" cy="158" rx="120" ry="8" fill="#000" opacity=".08"/>
-    <!-- anvil -->
-    <g>
-      <rect x="150" y="140" width="100" height="14" rx="4" fill="#7b7b7b"/>
-      <path d="M170 140 L178 112 L222 112 L230 140 Z" fill="#4d4d4d"/>
-      <path d="M120 90 Q118 78 138 76 L262 76 Q296 76 306 62 Q310 78 292 90 Q276 100 250 100 L160 100 Q132 100 120 90 Z" fill="#232323"/>
-      <path d="M120 90 Q118 78 138 76 L262 76 L262 82 L140 84 Q126 86 120 90 Z" fill="#4d4d4d"/>
-    </g>
-    <!-- glowing workpiece -->
-    <rect x="168" y="66" width="64" height="10" rx="5" fill="#ff9f43">
-      <animate attributeName="fill" values="#ff9f43;#fabf5c;#ff9f43" dur="2.2s" repeatCount="indefinite"/>
-    </rect>
-    <!-- hammer -->
-    <g class="hammer-group">
-      <rect x="196" y="10" width="9" height="58" rx="4" fill="#7b7b7b" transform="rotate(38 200 74)"/>
-      <rect x="222" y="2" width="34" height="22" rx="5" fill="#232323" transform="rotate(38 200 74)"/>
-    </g>
-    <!-- idle sparks -->
-    <g fill="#ff9f43">
-      <circle cx="176" cy="58" r="2"><animate attributeName="opacity" values="0;1;0" dur="1.7s" repeatCount="indefinite"/></circle>
-      <circle cx="234" cy="52" r="1.6"><animate attributeName="opacity" values="0;1;0" dur="2.3s" begin=".5s" repeatCount="indefinite"/></circle>
-      <circle cx="206" cy="46" r="1.3"><animate attributeName="opacity" values="0;1;0" dur="1.3s" begin=".9s" repeatCount="indefinite"/></circle>
-    </g>
-  </svg>
+  <!-- pixel forge hero — generated from maps in fx.js at boot -->
+  <svg id="logo" viewBox="0 0 400 170" shape-rendering="crispEdges" role="img" aria-label="Forgecade anvil"></svg>
   <div class="wordmark">Forgecade<em>.</em></div>
   <p class="tagline">the party game where the games don't exist yet</p>
   <div class="row"><input id="name" placeholder="your name" maxlength="24" autocomplete="off"></div>
@@ -113,7 +90,7 @@
 
 <!-- DICE ----------------------------------------------------------------- -->
 <div class="view" id="view-rolling">
-  <h2 class="center">🎲 The dice decides</h2>
+  <h2 class="center"><span id="die-slot"></span>The dice decides</h2>
   <ul class="ideas" id="dice-list"></ul>
 </div>
 
@@ -121,53 +98,9 @@
 <div class="view" id="view-forging">
   <h2 class="center">The forge is working</h2>
   <p class="center dim" id="forge-idea" style="font-style:italic"></p>
-  <svg id="forge-scene" viewBox="0 0 380 220" role="img" aria-label="a forge hammering a glowing game into shape">
-    <!-- ground glow + shadow -->
-    <ellipse class="glow" cx="188" cy="196" rx="150" ry="24" fill="#ff9f43" opacity=".14"/>
-    <ellipse cx="188" cy="200" rx="120" ry="9" fill="#000" opacity=".08"/>
-    <!-- fire pit -->
-    <path d="M40 200 Q34 172 62 168 L98 168 Q118 170 116 200 Z" fill="#e4e4e4"/>
-    <g class="flames">
-      <path d="M64 180 Q58 160 78 152 Q76 166 88 170 Q94 158 98 150 Q108 166 96 182 Q82 192 64 180 Z" fill="#ff9f43">
-        <animate attributeName="opacity" values="1;.55;1" dur="1.1s" repeatCount="indefinite"/>
-      </path>
-      <path d="M72 176 Q70 164 82 160 Q82 170 90 174 Q84 182 72 176 Z" fill="#fef991">
-        <animate attributeName="opacity" values=".8;1;.8" dur="0.7s" repeatCount="indefinite"/>
-      </path>
-    </g>
-    <!-- embers drifting up from the fire -->
-    <g fill="#ff9f43">
-      <circle class="ember ember-1" cx="70" cy="168" r="2.2"/>
-      <circle class="ember ember-2" cx="84" cy="166" r="1.6"/>
-      <circle class="ember ember-3" cx="60" cy="170" r="1.8"/>
-      <circle class="ember ember-4" cx="92" cy="168" r="1.4"/>
-    </g>
-    <!-- anvil -->
-    <rect x="150" y="182" width="76" height="12" rx="3" fill="#7b7b7b"/>
-    <path d="M164 182 L170 156 L206 156 L212 182 Z" fill="#4d4d4d"/>
-    <g class="anvil-top">
-      <path d="M132 132 Q130 122 146 120 L236 120 Q262 120 270 110 Q274 122 260 131 Q248 138 228 138 L160 138 Q140 138 132 132 Z" fill="#232323"/>
-      <!-- workpiece: the glowing game-to-be -->
-      <rect class="workpiece" x="166" y="112" width="52" height="9" rx="4.5" fill="#ff9f43"/>
-    </g>
-    <!-- impact flash + shock ring -->
-    <circle class="impact-flash" cx="190" cy="114" r="10" fill="#fef991"/>
-    <circle class="shock-ring" cx="190" cy="114" r="6" fill="none" stroke="#fef991" stroke-width="2"/>
-    <!-- sparks that fly on each strike -->
-    <g class="sparks" fill="#fef991">
-      <g transform="translate(190 113) rotate(-158)"><rect class="spark" x="0" y="-1.1" width="7" height="2.2" rx="1.1"/></g>
-      <g transform="translate(190 113) rotate(-130)"><rect class="spark" x="0" y="-1.1" width="9" height="2.2" rx="1.1"/></g>
-      <g transform="translate(190 113) rotate(-104)"><rect class="spark" x="0" y="-1.1" width="8" height="2.2" rx="1.1"/></g>
-      <g transform="translate(190 113) rotate(-78)"><rect class="spark" x="0" y="-1.1" width="9" height="2.2" rx="1.1"/></g>
-      <g transform="translate(190 113) rotate(-52)"><rect class="spark" x="0" y="-1.1" width="7" height="2.2" rx="1.1"/></g>
-      <g transform="translate(190 113) rotate(-24)"><rect class="spark" x="0" y="-1.1" width="6" height="2.2" rx="1.1"/></g>
-    </g>
-    <!-- hammer -->
-    <g class="arm">
-      <rect x="240" y="40" width="8" height="60" rx="4" fill="#7b7b7b"/>
-      <rect x="226" y="26" width="36" height="20" rx="5" fill="#232323"/>
-    </g>
-  </svg>
+  <!-- pixel forge scene — generated from maps in fx.js at boot; the CSS
+       animation contract stays: .arm pivots at (245,96), impact at (190,114) -->
+  <svg id="forge-scene" viewBox="0 0 380 220" shape-rendering="crispEdges" role="img" aria-label="a forge hammering a glowing game into shape"></svg>
   <div class="molten-bar"><div id="forge-bar" style="width:0%"></div></div>
   <p class="center dim" id="forge-kb"></p>
   <p class="center dim forge-line" id="forge-line"></p>
@@ -192,7 +125,7 @@
 <div class="view" id="view-playing">
   <div id="topbar">
     <strong class="mono" id="top-code"></strong>
-    <svg class="mini-hammer" id="mini-hammer" viewBox="0 0 24 24"><rect x="11" y="8" width="3" height="14" rx="1.5" fill="#6b5b47"/><rect x="6" y="2" width="14" height="8" rx="2" fill="#a89d8c"/></svg>
+    <svg class="mini-hammer" id="mini-hammer" viewBox="0 0 24 24" shape-rendering="crispEdges"><rect x="11" y="9" width="3" height="13" fill="#7b7b7b"/><rect x="5" y="3" width="15" height="6" fill="#232323"/><rect x="5" y="3" width="15" height="2" fill="#7b7b7b" opacity=".5"/></svg>
     <div id="top-roster"></div>
     <span class="grow" id="top-status"></span>
     <button id="top-play" class="go" style="display:none">▶ next game</button>

@@ -193,7 +193,11 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-// --- avatars: procedural forge golems ------------------------------------
+// --- pixel art engine ------------------------------------------------------
+// One visual language for the whole product: every asset is a pixel map
+// rendered as run-length-merged SVG rects with crisp edges. The lobby golem
+// IS the warm-up fighter — same maps, same silhouette.
+
 export function hashId(str) {
   let h = 2166136261;
   for (const c of str) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); }
@@ -201,28 +205,226 @@ export function hashId(str) {
 }
 const hash = hashId;
 
-const SKINS = ["#232323", "#7b7b7b", "#4bb956", "#ff9f43", "#5b8db8", "#c76a5a"];
+// in-game player identity — the same color follows a player from the lobby
+// card through the warm-up arena into every generated game
+export const PALETTE = ["#4bb956", "#ff453a", "#ff9f43", "#5b8db8", "#c76a5a", "#8a63c2", "#2f9e8f", "#b58900"];
+export const colorFor = (id) => PALETTE[hashId(String(id)) % PALETTE.length];
+
+const INK = "#232323", SUB = "#7b7b7b", PAPER = "#f6f6f6";
+const GLOW = "#ff9f43", MARK = "#fef991", BLOCK2 = "#e4e4e4";
+
+// pixel map ("#" = filled) -> SVG rects, adjacent pixels merged per row
+export function px(map, color, ox = 0, oy = 0, attrs = "") {
+  let out = "";
+  map.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      if (row[x] === "#") {
+        let w = 1;
+        while (row[x + w] === "#") w++;
+        out += `<rect x="${ox + x}" y="${oy + y}" width="${w}" height="1" fill="${color}"${attrs ? " " + attrs : ""}/>`;
+        x += w;
+      } else x++;
+    }
+  });
+  return out;
+}
+
+// --- the forge golem (22 px wide) — shared with the warm-up brawler ---------
+export const GOLEM_HEADS = [
+  [ // round helm
+    ".......########.......",
+    ".....############.....",
+    "....##############....",
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "....##############....",
+  ],
+  [ // bucket
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "...################...",
+    "....##############....",
+    ".....############.....",
+    ".....############.....",
+  ],
+  [ // pot with brim
+    ".........####.........",
+    ".......########.......",
+    ".....############.....",
+    "...################...",
+    "...################...",
+    "..##################..",
+    "...################...",
+    "....##############....",
+  ],
+];
+export const GOLEM_TORSO = [
+  ".....############.....",
+  "......##########......",
+  "......##########......",
+  ".....############.....",
+  "....##############....",
+  "....##############....",
+  ".....############.....",
+  "......##########......",
+];
+export const GOLEM_LEGS = [
+  "......###....###......",
+  "......###....###......",
+  ".....####....####.....",
+];
 
 export function avatarSVG(id) {
   const h = hash(id);
-  const skin = SKINS[h % SKINS.length];
-  const head = h % 3;          // 0 round helm, 1 bucket, 2 pot with rivets
-  const eyes = (h >> 3) % 3;   // 0 dots, 1 visor, 2 sleepy
-  const heads = [
-    `<circle cx="32" cy="30" r="20" fill="${skin}"/><rect x="12" y="28" width="40" height="6" fill="#000" opacity=".18"/>`,
-    `<rect x="14" y="12" width="36" height="38" rx="6" fill="${skin}"/><rect x="10" y="44" width="44" height="5" rx="2" fill="#000" opacity=".2"/>`,
-    `<path d="M14 46 Q14 12 32 12 Q50 12 50 46 Z" fill="${skin}"/><circle cx="20" cy="40" r="2" fill="#000" opacity=".25"/><circle cx="44" cy="40" r="2" fill="#000" opacity=".25"/>`,
-  ];
-  const eyeSets = [
-    `<circle cx="25" cy="32" r="4.4" fill="#f6f6f6"/><circle cx="39" cy="32" r="4.4" fill="#f6f6f6"/><circle cx="25" cy="32" r="2" fill="#232323"/><circle cx="39" cy="32" r="2" fill="#232323"/>`,
-    `<rect x="19" y="28" width="26" height="7" rx="3.5" fill="#232323"/><rect x="21" y="30" width="9" height="3" rx="1.5" fill="#fef991"/>`,
-    `<path d="M21 33 q4 -4 8 0" stroke="#f6f6f6" stroke-width="2.5" fill="none"/><path d="M35 33 q4 -4 8 0" stroke="#f6f6f6" stroke-width="2.5" fill="none"/>`,
-  ];
-  return `<svg viewBox="0 0 64 64" class="golem" aria-hidden="true">
-    <ellipse cx="32" cy="58" rx="16" ry="4" fill="#000" opacity=".12"/>
-    <rect x="22" y="44" width="20" height="12" rx="4" fill="${skin}" opacity=".85"/>
-    ${heads[head]}${eyeSets[eyes]}
+  const head = GOLEM_HEADS[h % 3];
+  const color = colorFor(id);
+  return `<svg viewBox="-1 -2 24 25" class="golem" shape-rendering="crispEdges" aria-hidden="true">
+    <rect x="4" y="20" width="14" height="1" fill="#000" opacity=".10"/>
+    ${px(head, INK, 0, 0)}
+    ${px(GOLEM_TORSO, INK, 0, 8)}
+    ${px(GOLEM_LEGS, INK, 0, 16)}
+    <g class="golem-eyes">
+      <rect x="11" y="3" width="2" height="2" fill="${PAPER}"/>
+      <rect x="15" y="3" width="2" height="2" fill="${PAPER}"/>
+    </g>
+    <rect class="golem-core" x="10" y="11" width="3" height="2" fill="${color}"/>
   </svg>`;
+}
+
+// --- shared anvil silhouette (34 x 11) ---------------------------------------
+const ANVIL_PLATE = [
+  "........##########################",
+  "...###############################",
+  "##################################",
+];
+const ANVIL_BODY = [
+  "..####....###############.........",
+  "..........###############.........",
+  "............###########...........",
+  "............###########...........",
+  "..........###############.........",
+  "........###################.......",
+  "........###################.......",
+  ".......#####################......",
+];
+
+// --- home hero: the idle forge (400 x 170 viewBox, 8px cells) ----------------
+export function forgeHeroSVG() {
+  const C = 8;
+  const at = (inner) => `<g transform="scale(${C})">${inner}</g>`;
+  return at(`
+    <rect x="9" y="19" width="32" height="1" fill="#000" opacity=".08"/>
+    ${px(ANVIL_PLATE, INK, 8, 7)}
+    ${px(ANVIL_BODY, INK, 8, 10)}
+    <rect x="16" y="7" width="26" height="1" fill="${SUB}" opacity=".55"/>
+    <g class="hero-work">
+      <rect x="21" y="5" width="12" height="2" fill="${GLOW}"/>
+      <rect x="24" y="5" width="4" height="1" fill="${MARK}"/>
+    </g>
+    <g class="hammer-group">
+      <rect x="34" y="4" width="2" height="3" fill="${SUB}"/>
+      <rect x="29" y="0" width="12" height="4" fill="${INK}"/>
+      <rect x="29" y="0" width="12" height="1" fill="${SUB}" opacity=".5"/>
+    </g>
+    <g fill="${GLOW}">
+      <rect class="hero-ember hero-ember-1" x="22" y="4" width="1" height="1"/>
+      <rect class="hero-ember hero-ember-2" x="25" y="3" width="1" height="1"/>
+      <rect class="hero-ember hero-ember-3" x="28" y="4" width="1" height="1"/>
+    </g>
+  `);
+}
+
+// --- rolling screen: pixel die -----------------------------------------------
+export function dieSVG() {
+  return `<svg class="pixel-die" viewBox="0 0 14 14" shape-rendering="crispEdges" aria-hidden="true">
+    <rect x="1" y="0" width="12" height="14" fill="${INK}"/>
+    <rect x="0" y="1" width="14" height="12" fill="${INK}"/>
+    <rect x="2" y="1" width="10" height="12" fill="${PAPER}"/>
+    <rect x="1" y="2" width="12" height="10" fill="${PAPER}"/>
+    <rect x="3" y="3" width="2" height="2" fill="${INK}"/>
+    <rect x="6" y="6" width="2" height="2" fill="${INK}"/>
+    <rect x="9" y="9" width="2" height="2" fill="${INK}"/>
+  </svg>`;
+}
+
+// --- forging screen: pixel forge scene (380 x 220 viewBox, 4px cells) --------
+// Keeps the class/geometry contract of the CSS animation: .arm pivots at
+// (245,96), impact lands at (190,114), .anvil-top recoils, sparks fan out.
+const FLAME_A = [
+  ".....##.....#...",
+  "..#..###...##...",
+  "..##.####..##...",
+  ".############...",
+  ".#############..",
+  "..############..",
+  "...##########...",
+];
+const FLAME_B = [
+  "...#...##.......",
+  "..##..####..#...",
+  "..###.####.##...",
+  "..############..",
+  ".#############..",
+  ".############...",
+  "...##########...",
+];
+const FLAME_CORE = [
+  "....##....",
+  "..######..",
+  ".########.",
+  "..######..",
+];
+export function forgeSceneSVG() {
+  const C = 4;
+  const cell = (inner) => `<g transform="scale(${C})">${inner}</g>`;
+  const sparks = [-158, -130, -104, -78, -52, -24]
+    .map((a, i) => `<g transform="translate(190 113) rotate(${a})"><rect class="spark" x="0" y="-2" width="${[7, 9, 8, 9, 7, 6][i]}" height="4"/></g>`)
+    .join("");
+  return `
+    <rect class="glow" x="128" y="186" width="130" height="6" fill="${GLOW}" opacity=".10"/>
+    <rect x="112" y="194" width="160" height="5" fill="#000" opacity=".07"/>
+    <rect x="30" y="194" width="60" height="5" fill="#000" opacity=".07"/>
+    ${cell(`
+      <!-- fire pit -->
+      <rect x="8" y="46" width="24" height="2" fill="${BLOCK2}"/>
+      <rect x="9" y="48" width="22" height="3" fill="${BLOCK2}"/>
+      <g class="flame-a">${px(FLAME_A, GLOW, 12, 39)}${px(FLAME_CORE, MARK, 15, 42)}</g>
+      <g class="flame-b">${px(FLAME_B, GLOW, 12, 39)}${px(FLAME_CORE, MARK, 14, 42)}</g>
+      <g fill="${GLOW}">
+        <rect class="ember ember-1" x="16" y="40" width="1" height="1"/>
+        <rect class="ember ember-2" x="21" y="39" width="1" height="1"/>
+        <rect class="ember ember-3" x="14" y="41" width="1" height="1"/>
+        <rect class="ember ember-4" x="24" y="40" width="1" height="1"/>
+      </g>
+      <!-- anvil body (static) -->
+      ${px(ANVIL_BODY, INK, 31, 31)}
+    `)}
+    <g class="anvil-top">
+      ${cell(`${px(ANVIL_PLATE, INK, 31, 28)}<rect x="39" y="28" width="24" height="1" fill="${SUB}" opacity=".5"/>`)}
+      <rect class="workpiece" x="164" y="104" width="52" height="8" fill="${GLOW}"/>
+      <rect x="176" y="104" width="16" height="4" fill="${MARK}" opacity=".9"/>
+    </g>
+    <g class="impact-flash" fill="${MARK}">
+      <rect x="184" y="108" width="12" height="12"/>
+      <rect x="176" y="112" width="28" height="4"/>
+      <rect x="188" y="100" width="4" height="28"/>
+    </g>
+    <g class="shock-ring" fill="none" stroke="${MARK}" stroke-width="3">
+      <path d="M182 114 h-6 M198 114 h6 M190 106 v-4 M190 122 v4 M181 108 l-4 -3 M199 108 l4 -3 M181 120 l-4 3 M199 120 l4 3"/>
+    </g>
+    <g class="sparks" fill="${MARK}">${sparks}</g>
+    <g class="arm">
+      ${cell(`
+        <rect x="60" y="10" width="2" height="14" fill="${SUB}"/>
+        <rect x="55" y="5" width="11" height="5" fill="${INK}"/>
+        <rect x="55" y="5" width="11" height="1" fill="${SUB}" opacity=".5"/>
+      `)}
+    </g>`;
 }
 
 export { REDUCED };

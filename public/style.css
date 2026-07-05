@@ -78,12 +78,22 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 
 /* --- home ----------------------------------------------------------- */
 #logo { display: block; width: min(300px, 72%); margin: 0 auto .8rem; cursor: pointer; }
-#logo .hammer-group { transform-origin: 200px 74px; }
-#logo:hover .hammer-group { animation: logo-strike .5s ease-in-out; }
+#logo .hammer-group { transform-box: view-box; transform-origin: 280px 56px; animation: hero-hover 1.4s steps(1, end) infinite; }
+@keyframes hero-hover { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+#logo:hover .hammer-group { animation: logo-strike .5s steps(3, jump-none) infinite; }
 @keyframes logo-strike {
   0%, 100% { transform: rotate(0deg); }
   35% { transform: rotate(-38deg); }
   55% { transform: rotate(8deg); }
+}
+#logo .hero-work { animation: core-glow 2s steps(1, end) infinite; }
+#logo .hero-ember { opacity: 0; animation: hero-ember 2.4s steps(6) infinite; }
+#logo .hero-ember-2 { animation-duration: 1.9s; animation-delay: .6s; }
+#logo .hero-ember-3 { animation-duration: 2.9s; animation-delay: 1.2s; }
+@keyframes hero-ember {
+  0%   { opacity: 0; transform: translateY(0); }
+  10%  { opacity: .9; }
+  100% { opacity: 0; transform: translateY(-3px); }
 }
 .wordmark {
   text-align: center;
@@ -119,10 +129,16 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 
 .golems { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.3rem; margin: 1.6rem 0 2.6rem; }
 .golem-card { text-align: center; width: 90px; animation: scene-in .4s both; }
-.golem { width: 60px; height: 60px; animation: bob 2.6s ease-in-out infinite; }
+.golem { width: 60px; height: 60px; animation: pixel-bob 1.8s steps(1, end) infinite; }
+@keyframes pixel-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4%); } }
+.golem-eyes { animation: golem-blink 3.8s steps(1, end) infinite; }
+@keyframes golem-blink { 0%, 92% { opacity: 1; } 93%, 97% { opacity: 0; } 98%, 100% { opacity: 1; } }
+.golem-core { animation: core-glow 1.6s steps(1, end) infinite; }
+@keyframes core-glow { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 .golem-card:nth-child(2n) .golem { animation-delay: -1.3s; }
 .golem-card:nth-child(3n) .golem { animation-delay: -0.7s; }
-@keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.golem-card:nth-child(2n) .golem-eyes { animation-delay: -1.7s; }
+.golem-card:nth-child(3n) .golem-eyes { animation-delay: -2.9s; }
 .golem-card .pname {
   font-size: 13px;
   font-weight: 400;
@@ -193,6 +209,10 @@ button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
   padding: .18rem .6rem; border-radius: 6px;
 }
 
+/* rolling screen: pixel die wobbles in the heading */
+.pixel-die { width: 24px; height: 24px; display: inline-block; vertical-align: -3px; margin-right: 10px; animation: die-wobble 0.8s steps(1, end) infinite; }
+@keyframes die-wobble { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+
 /* --- reveal / dice ---------------------------------------------------- */
 .ideas { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .55rem; margin-top: 1.6rem; }
 .ideas .card {
@@ -225,12 +245,12 @@ button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
   100%    { transform: rotate(24deg); }   /* raise back up */
 }
 
-/* workpiece flashes white-hot on each strike */
-#forge-scene .workpiece { animation: forge-heat 1.15s ease-out infinite; }
+/* workpiece flashes white-hot on each strike (crisp pixel — no blur) */
+#forge-scene .workpiece { animation: forge-heat 1.15s steps(1, end) infinite; }
 @keyframes forge-heat {
-  0%, 36%  { fill: #ff9f43; filter: drop-shadow(0 0 5px rgba(255, 159, 67, .6)); }
-  42%      { fill: #fff7d6; filter: drop-shadow(0 0 12px rgba(254, 249, 145, .95)); }
-  72%,100% { fill: #ff9f43; filter: drop-shadow(0 0 6px rgba(255, 159, 67, .7)); }
+  0%, 40%  { fill: #ff9f43; }
+  41%, 55% { fill: #fff7d6; }
+  56%,100% { fill: #ff9f43; }
 }
 
 /* the anvil takes the blow */
@@ -271,16 +291,23 @@ button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
   64%,100% { opacity: 0; transform: translateX(40px); }
 }
 
-/* embers drift up off the fire */
-#forge-scene .ember { opacity: 0; animation: ember-rise 2.4s ease-in infinite; }
+/* embers drift up off the fire — cell space (inside the scale(4) group),
+   stepped so they climb pixel by pixel */
+#forge-scene .ember { opacity: 0; animation: ember-rise 2.4s steps(10) infinite; }
 #forge-scene .ember-2 { animation-duration: 1.9s; animation-delay: .5s; }
 #forge-scene .ember-3 { animation-duration: 2.8s; animation-delay: 1s; }
 #forge-scene .ember-4 { animation-duration: 2.1s; animation-delay: 1.6s; }
 @keyframes ember-rise {
   0%   { opacity: 0; transform: translate(0, 0); }
   20%  { opacity: .9; }
-  100% { opacity: 0; transform: translate(-6px, -46px); }
+  100% { opacity: 0; transform: translate(-2px, -11px); }
 }
+
+/* fire: two pixel flame frames alternating */
+#forge-scene .flame-a { animation: flame-show 0.5s steps(1, end) infinite; }
+#forge-scene .flame-b { animation: flame-hide 0.5s steps(1, end) infinite; }
+@keyframes flame-show { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes flame-hide { 0%, 49% { opacity: 0; } 50%, 100% { opacity: 1; } }
 
 #forge-scene .glow { animation: breathe 2.2s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .4; } }
