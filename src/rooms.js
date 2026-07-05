@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
-import { generateGame } from "./generator.js";
+import { generateGame, repairGame } from "./generator.js";
 
 const SUBMIT_MS = 30_000;
 const DICE_MS = 4_000;
@@ -26,6 +26,7 @@ export function broadcastAll(msg) {
 
 let activeForges = 0;
 const forgeWaitlist = new Set(); // rooms backed off because the forge was busy
+const reworkedSlugs = new Set(); // every broken build gets exactly ONE rework
 
 function pumpForge() {
   let free = MAX_FORGES - activeForges;
@@ -84,7 +85,11 @@ function snapshot(room) {
       ? [...room.ideas].map(([by, idea]) => ({ idea, by }))
       : null,
     rolling: room.rolling,
-    forging: room.forging && { idea: room.forging.idea, progress: room.forging.progress },
+    forging: room.forging && {
+      idea: room.forging.idea,
+      progress: room.forging.progress,
+      repair: Boolean(room.forging.repair),
+    },
     readyGame: room.readyGame,
     currentGame: room.currentGame,
     queue: room.queue.map((q) => ({ idea: q.idea, by: q.by })),
@@ -380,6 +385,97 @@ const handlers = {
     room.forging?.abort.abort();
     room.phase = "ceremony";
     sync(room);
+  },
+
+  // A game that died on the players' screens gets ONE rework: the broken build
+  // and the runtime error go back to the forge, and the fixed game is swapped
+  // in live. The host's client triggers this automatically (boot watchdog /
+  // crash loop) — players just see "reforging" instead of a dead screen.
+  async repair_game(room, player, msg) {
+    const slug = String(msg.slug ?? "");
+    if (player.id !== room.hostId || !/^[a-z0-9-]+$/.test(slug)) return;
+    if (room.currentGame?.slug !== slug) return;
+    if (room.forging || reworkedSlugs.has(slug)) return;
+    if (activeForges >= MAX_FORGES) {
+      return broadcast(room, { type: "toast", message: "the forge is at capacity — skip the game instead" });
+    }
+    reworkedSlugs.add(slug);
+    let broken, meta;
+    try {
+      broken = await readFile(join(room.gamesDir, slug, "index.html"), "utf8");
+      meta = JSON.parse(await readFile(join(room.gamesDir, slug, "meta.json"), "utf8"));
+    } catch {
+      return; // game vanished from disk — nothing to rework
+    }
+    const error = String(msg.error ?? "unknown runtime error").slice(0, 300);
+    // a dice mid-roll would fire a queue forge straight into this rework —
+    // settle it; the queue resumes once the rework lands
+    clearTimeout(room.timer);
+    room.rolling = null;
+    const abort = new AbortController();
+    room.forging = { idea: meta.idea, progress: 0, abort, repair: true };
+    broadcast(room, { type: "toast", message: "that build came off the anvil cracked — reforging it" });
+    sync(room);
+    console.log(`[forgecade] ${room.code} rework start for ${slug}: ${error}`);
+    activeForges++;
+    try {
+      let lastSync = 0;
+      const html = await repairGame(meta.idea, broken, error, {
+        signal: abort.signal,
+        onProgress: (chars) => {
+          room.forging.progress = chars;
+          if (Date.now() - lastSync > 1000) {
+            lastSync = Date.now();
+            sync(room);
+          }
+        },
+      });
+      const newSlug = slugify(meta.idea);
+      reworkedSlugs.add(newSlug); // a rework never gets another rework — no chains
+      const title = html.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim() || meta.idea;
+      const dir = join(room.gamesDir, newSlug);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "index.html"), html);
+      await writeFile(
+        join(dir, "meta.json"),
+        JSON.stringify(
+          { slug: newSlug, idea: meta.idea, title, createdAt: new Date().toISOString(), reworkOf: slug },
+          null,
+          2,
+        ),
+      );
+      room.forging = null;
+      const fixed = { slug: newSlug, idea: meta.idea, title };
+      for (const h of room.history) {
+        if (h.slug === slug) { h.slug = newSlug; h.title = title; } // replays get the fix
+      }
+      if (room.currentGame?.slug === slug) {
+        room.currentGame = fixed; // clients reload the iframe on the new slug
+        room.gameEnded = false;
+      } else if (!room.readyGame) {
+        // the party skipped on meanwhile — serve the fix as the next ready game
+        room.readyGame = fixed;
+        room.readySince = Date.now();
+        if (room.phase === "forging") room.phase = "ready";
+      }
+      console.log(`[forgecade] ${room.code} rework done: ${slug} -> ${newSlug}`);
+      if (room.queue.length > 0 && !room.forging) return toRolling(room); // resume the queue
+      sync(room);
+    } catch (err) {
+      room.forging = null;
+      if (abort.signal.aborted) {
+        console.log(`[forgecade] ${room.code} rework cancelled for ${slug}`);
+        if (!rooms.has(room.code)) return;
+        if (room.phase === "forging") room.phase = room.readyGame ? "ready" : "lobby";
+        return sync(room);
+      }
+      console.error(`[forgecade] ${room.code} rework failed for ${slug}:`, err.message);
+      broadcast(room, { type: "toast", message: "the rework failed too — skip that one" });
+      sync(room);
+    } finally {
+      activeForges--;
+      pumpForge();
+    }
   },
 
   game_end(room, player, msg) {

@@ -326,6 +326,48 @@ export async function validateGameHtml(html) {
   }
 }
 
+// One-round rework for a game that crashed on the players' machines: the
+// broken build and the runtime error go back to the model. Used by the
+// auto-repair path — generation-time failures use the inline repair round.
+export async function repairGame(idea, brokenHtml, runtimeError, { onProgress, signal } = {}) {
+  if (FAKE) {
+    for (let i = 1; i <= 3; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      if (signal?.aborted) throw new Error("forge cancelled");
+      onProgress?.(i * 1000);
+    }
+    await validateGameHtml(FAKE_GAME);
+    return FAKE_GAME;
+  }
+  const res = await requestGame(
+    [
+      { role: "user", content: `Game idea: ${idea}` },
+      { role: "assistant", content: brokenHtml },
+      {
+        role: "user",
+        content:
+          `This game crashed while people were playing it. Runtime error: ${runtimeError}. ` +
+          `Output the complete corrected HTML document — same game, fixed code. Fix the root ` +
+          `cause, don't just guard the symptom. Same output rules: respond with ONLY the HTML ` +
+          `document, no fences, no explanation.`,
+      },
+    ],
+    onProgress,
+    0,
+    signal,
+  );
+  try {
+    if (res.stopReason === "max_tokens") throw new Error("rework hit the token limit — output incomplete");
+    const doc = extractHtml(res.text);
+    await validateGameHtml(doc);
+    console.log(`[forgecade] reworked "${idea}" (${MODEL})`);
+    return doc;
+  } catch (err) {
+    if (!signal?.aborted) await archiveFailedForge(idea, res.text, `rework: ${err.message}`);
+    throw err;
+  }
+}
+
 // Keeps the raw output of a failed forge around for postmortems. listGames
 // ignores this directory because it never gets a meta.json.
 async function archiveFailedForge(idea, text, error) {

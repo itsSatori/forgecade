@@ -12,6 +12,10 @@ let phaseTimers = [];                // cleared on every phase change
 let lastProgress = -1;
 let bootWatch = null;                // iframe boot watchdog
 let lastGameErr = 0;                 // throttles in-game error toasts
+let gameErrCount = 0;                // errors since the current game mounted
+let gameMountedAt = 0;
+let lastGameError = "";
+const repairRequested = new Set();   // slugs this client already reported
 let gameEndTimer = null;
 let spectatingSlug = null, freshJoin = false;
 let playFlipTimer = null, lastReadySince = null;
@@ -392,7 +396,7 @@ function renderPlaying(isHost, entered) {
   $("top-code").textContent = state.code;
   let status = "";
   if (state.rolling) status = "🎲 the dice decides what's next…";
-  else if (state.forging) status = `⚒ forging: ${state.forging.idea} — ${Math.round(state.forging.progress / 1024)} KB`;
+  else if (state.forging) status = `⚒ ${state.forging.repair ? "reforging" : "forging"}: ${state.forging.idea} — ${Math.round(state.forging.progress / 1024)} KB`;
   else if (state.readyGame) status = `✨ ready: ${state.readyGame.title ?? state.readyGame.idea}`;
   else if (state.queue.length) status = `${state.queue.length} idea(s) waiting for the fire`;
   else if (state.forgeError) status = `⚠ ${state.forgeError}`;
@@ -404,6 +408,7 @@ function renderPlaying(isHost, entered) {
   $("top-round").style.display = isHost && idle ? "" : "none";
   $("top-endnight").style.display = isHost && idle ? "" : "none";
   $("top-skip").style.display = isHost && state.currentGame ? "" : "none";
+  $("top-douse").style.display = isHost && state.forging ? "" : "none";
   $("top-roster").innerHTML = state.players.map((p) =>
     `<span class="top-golem ${p.connected ? "" : "off"}" title="${esc(p.name)}">${avatarSVG(p.id)}</span>`).join("");
   $("spectate-banner").hidden = !(spectatingSlug && state.currentGame?.slug === spectatingSlug);
@@ -467,7 +472,28 @@ const postToGame = (m) =>
 
 function armBootWatch() {
   clearTimeout(bootWatch);
-  bootWatch = setTimeout(() => toast("this game won't boot — host can skip it"), 12_000);
+  gameErrCount = 0; gameMountedAt = Date.now(); lastGameError = "";
+  bootWatch = setTimeout(() => {
+    maybeRequestRepair(
+      "the game never signalled ready within 12s of loading" +
+      (lastGameError ? ` — first error: ${lastGameError}` : ""),
+    );
+  }, 12_000);
+}
+
+// A dead game heals itself: the host's client reports it once and the server
+// reforges a fixed build from the broken HTML plus the runtime error.
+// Non-hosts just get the explanation — the host's report covers everyone,
+// since a broken build crashes on every machine alike.
+function maybeRequestRepair(error) {
+  const slug = state?.currentGame?.slug;
+  if (!slug || repairRequested.has(slug)) return;
+  repairRequested.add(slug);
+  if (state.hostId === myId) {
+    send({ type: "repair_game", slug, error: String(error).slice(0, 300) });
+  } else {
+    toast("this game came out broken — waiting for the forge to rework it");
+  }
 }
 
 function mountGame(entered) {
@@ -541,9 +567,15 @@ window.addEventListener("message", (e) => {
     // the host's result is authoritative; server broadcasts game_end back
     if (state?.hostId === myId) send({ type: "game_end", scores: m.result?.scores ?? {} });
   } else if (m.type === "error") {
+    lastGameError = String(m.message ?? "unknown").slice(0, 200);
+    gameErrCount++;
     if (Date.now() - lastGameErr > 5000) {
       lastGameErr = Date.now();
-      toast(`the game hiccuped: ${String(m.message ?? "unknown").slice(0, 120)}`);
+      toast(`the game hiccuped: ${lastGameError.slice(0, 120)}`);
+    }
+    // three crashes within the first minute is a broken build, not a hiccup
+    if (gameErrCount >= 3 && Date.now() - gameMountedAt < 60_000) {
+      maybeRequestRepair(`crashed repeatedly right after boot — latest: ${lastGameError}`);
     }
   }
 });
@@ -623,6 +655,7 @@ $("top-play").onclick = () => send({ type: "play_next" });
 $("top-skip").onclick = () => send({ type: "skip_game" });
 $("reforge").onclick = () => send({ type: "discard_ready" });
 $("cancel-forge").onclick = () => send({ type: "cancel_forge" });
+$("top-douse").onclick = () => send({ type: "cancel_forge" });
 $("top-endnight").onclick = () => send({ type: "end_night" });
 $("top-leave").onclick = leaveRoom;
 $("leave-lobby").onclick = leaveRoom;
