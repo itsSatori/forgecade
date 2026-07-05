@@ -79,20 +79,51 @@ precision physics duels or twitch head-to-head reaction contests.
   add an in-game "play again" button: a new round is started from Forgecade (the
   party frame), not from inside the game. The scoreboard just celebrates the result.
 
+## Engines & libraries — pick what serves the idea
+
+- Plain 2D <canvas> without any library is the DEFAULT: right for most party
+  games, and it can never fail to load.
+- You MAY use a library when the idea truly benefits (3D, heavy physics, rich
+  music). ONLY these script tags exist and pass the sandbox — copy one
+  character for character, never invent another URL (a 404'd script tag means
+  a black screen and a ruined round):
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>  (3D, global BABYLON)
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>  (3D, global THREE, r128 API)
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js"></script>  (fast 2D, global PIXI)
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>  (2D physics, global Matter)
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>  (music/synth, global Tone)
+- Classic scripts only: no ES modules, no import/export, no type="module", no
+  dynamic import() — the validator rejects them.
+
+## The sandbox punishes these — never use them
+
+The game runs with an opaque origin under a strict CSP. Each of these throws
+or is silently blocked, and each has broken games before:
+- localStorage / sessionStorage / indexedDB / document.cookie — storage THROWS
+  in the sandbox. Keep all state in plain JS variables; rounds are short.
+- alert() / confirm() / prompt() / window.open() — blocked. Build overlays in-DOM.
+- Any network API (WebSocket, fetch, XHR, EventSource, sendBeacon) — use the SDK.
+- External images, fonts and stylesheets — draw art on canvas or inline SVG,
+  use system font stacks (ui-monospace, system-ui, sans-serif), synthesize
+  sound with WebAudio.
+
 ## Rules for the game itself
 
 - One single, self-contained HTML file. All CSS and JavaScript inline.
-- Use Babylon.js for 3D (load via <script src="https://cdn.babylonjs.com/babylon.js"></script>).
-  For 2D, plain <canvas> or DOM without any library is fine — pick what fits the idea.
-- No build step, no server calls, no external assets — the SDK script tag and the
-  Babylon.js CDN script tag are the only external resources allowed.
-  Generate shapes, colors and sounds procedurally (WebAudio welcome).
+- Fill the whole iframe: size the canvas to window.innerWidth/innerHeight,
+  handle window resize, stay readable in landscape and portrait.
 - Show the controls on screen and make it obvious whose turn / what the goal is.
 - Every game must ALSO be playable by touch: on-screen buttons or tap zones
   next to any keyboard controls — someone always joins on a phone.
 - Use ctx.players[i].color for everything that represents a player: sprites,
-  labels, trails, scoreboard rows. Use ctx.seed for procedural generation so
-  every client sees the same world.
+  labels, trails, scoreboard rows.
+- Never use Math.random() for anything all players must agree on (level layout,
+  item drops, turn order). Derive shared values from ctx.seed:
+    function rng(s){return()=>((s=Math.imul(48271,s)&2147483647)/2147483648)}
+    const rand = rng(ctx.seed); // same sequence on every client
+  Math.random() is fine for purely cosmetic local effects (particles, shakes).
+- Target 60fps on a weak laptop: cap particle counts, avoid per-frame
+  allocations and full-DOM rewrites in the game loop.
 - Inside inline JS strings, write <\\/script> instead of </script> so the
   document does not terminate early.
 
@@ -193,10 +224,49 @@ function extractHtml(text) {
   return html.trim();
 }
 
+// Script hosts the game sandbox CSP allows — keep in sync with GAME_HEADERS
+// in server.js. Everything else 404s or gets blocked at play time, so the
+// validator refuses it at forge time, where the repair round can still fix it.
+const ALLOWED_SCRIPT_HOSTS = new Set(["cdn.babylonjs.com", "cdnjs.cloudflare.com"]);
+
+// APIs that throw or are silently blocked inside the sandboxed iframe.
+// Each entry: [needle, message for the repair round].
+const BANNED_APIS = [
+  ["new WebSocket", "the sandbox blocks all network access — use the Forgecade SDK instead"],
+  ["fetch(", "the sandbox blocks all network access (connect-src 'none') — use the Forgecade SDK instead"],
+  ["XMLHttpRequest", "the sandbox blocks all network access — use the Forgecade SDK instead"],
+  ["EventSource(", "the sandbox blocks all network access — use the Forgecade SDK instead"],
+  ["sendBeacon", "the sandbox blocks all network access — use the Forgecade SDK instead"],
+  ["localStorage", "storage THROWS in the sandboxed iframe (opaque origin) — keep state in plain JS variables"],
+  ["sessionStorage", "storage THROWS in the sandboxed iframe (opaque origin) — keep state in plain JS variables"],
+  ["indexedDB", "storage THROWS in the sandboxed iframe (opaque origin) — keep state in plain JS variables"],
+  ["document.cookie", "cookies are blocked in the sandboxed iframe — keep state in plain JS variables"],
+  ["alert(", "alert() is blocked in the sandboxed iframe — build an in-DOM overlay instead"],
+  ["confirm(", "confirm() is blocked in the sandboxed iframe — build an in-DOM overlay instead"],
+  ["window.open(", "window.open() is blocked in the sandboxed iframe"],
+];
+
+// One reachability probe per unique URL per process — repair rounds and later
+// forges reuse the verdict.
+const urlProbeCache = new Map();
+async function scriptUrlAlive(url) {
+  if (urlProbeCache.has(url)) return urlProbeCache.get(url);
+  let verdict = true;
+  try {
+    const res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000), redirect: "follow" });
+    verdict = res.ok;
+  } catch {
+    // network hiccup or offline box — can't disprove the URL, let it pass
+    verdict = true;
+  }
+  urlProbeCache.set(url, verdict);
+  return verdict;
+}
+
 // Guards the party from broken games. Structural checks first, with precise
 // messages (they feed the repair round), then a syntax check of every inline
-// script so a game never dies on load.
-function validateGameHtml(html) {
+// script so a game never dies on load. Exported for tests.
+export async function validateGameHtml(html) {
   if (html.length < 2000) {
     throw new Error(`document is only ${html.length} chars — far too short for a complete game`);
   }
@@ -209,14 +279,44 @@ function validateGameHtml(html) {
   if (!/Forgecade\.init\s*\(/.test(html)) {
     throw new Error("never calls Forgecade.init(...) — the game would never start");
   }
-  for (const banned of ["new WebSocket", "fetch(", "XMLHttpRequest", "EventSource("]) {
-    if (html.includes(banned)) {
-      throw new Error(`uses ${banned} — the sandbox blocks all network access (connect-src 'none'); use the Forgecade SDK instead`);
+  if (!/Forgecade\.end\s*\(/.test(html)) {
+    throw new Error("never calls Forgecade.end(...) — the round could never finish; the host must call it when the round is decided");
+  }
+  for (const [needle, why] of BANNED_APIS) {
+    if (html.includes(needle)) {
+      throw new Error(`uses ${needle} — ${why}`);
     }
   }
+  if (/<link[^>]*\bhref\s*=\s*["']?https?:/i.test(html)) {
+    throw new Error("loads an external stylesheet — the sandbox blocks it; inline all CSS");
+  }
+  if (/<img[^>]*\bsrc\s*=\s*["']?https?:/i.test(html)) {
+    throw new Error("loads an external image — the sandbox blocks it; draw art on canvas or use inline SVG / data: URIs");
+  }
+
+  // external scripts: only whitelisted hosts, and the URL must actually exist —
+  // a hallucinated library URL is a guaranteed black screen at play time
+  for (const [, src] of html.matchAll(/<script[^>]*\bsrc\s*=\s*["']?([^"'\s>]+)/gi)) {
+    if (src === "/forgecade-sdk.js") continue;
+    let host;
+    try {
+      host = new URL(src).hostname;
+    } catch {
+      throw new Error(`script src "${src}" is not the SDK and not an absolute https URL — only /forgecade-sdk.js and the whitelisted CDN tags are allowed`);
+    }
+    if (!ALLOWED_SCRIPT_HOSTS.has(host)) {
+      throw new Error(`script src host "${host}" is blocked by the sandbox — only these hosts work: ${[...ALLOWED_SCRIPT_HOSTS].join(", ")}; use one of the whitelisted library tags or plain canvas`);
+    }
+    if (!(await scriptUrlAlive(src))) {
+      throw new Error(`script URL does not exist (HTTP error): ${src} — use one of the whitelisted library tags character for character, or plain canvas`);
+    }
+  }
+
   const scripts = html.matchAll(/<script(?![^>]*\bsrc=)([^>]*)>([\s\S]*?)<\/script>/gi);
   for (const [, attrs, code] of scripts) {
-    if (/type\s*=\s*["']?module/i.test(attrs)) continue; // vm.Script can't parse modules
+    if (/type\s*=\s*["']?module/i.test(attrs)) {
+      throw new Error(`uses <script type="module"> — ES modules are not supported; use a classic inline script`);
+    }
     if (!code.trim()) continue;
     try {
       new vm.Script(code);
@@ -307,7 +407,7 @@ export async function generateGame(idea, { onProgress, signal } = {}) {
       if (signal?.aborted) throw new Error("forge cancelled");
       onProgress?.(i * 1000);
     }
-    validateGameHtml(FAKE_GAME);
+    await validateGameHtml(FAKE_GAME);
     return FAKE_GAME;
   }
 
@@ -329,7 +429,7 @@ export async function generateGame(idea, { onProgress, signal } = {}) {
   } else {
     try {
       doc = extractHtml(first.text);
-      validateGameHtml(doc);
+      await validateGameHtml(doc);
       console.log(`[forgecade] forged "${idea}" in ${Date.now() - started}ms (${MODEL})`);
       return doc;
     } catch (err) {
@@ -364,7 +464,7 @@ export async function generateGame(idea, { onProgress, signal } = {}) {
       throw new Error("Generation hit the token limit — game is incomplete");
     }
     const repaired = extractHtml(second.text);
-    validateGameHtml(repaired);
+    await validateGameHtml(repaired);
     console.log(`[forgecade] forged "${idea}" in ${Date.now() - started}ms (${MODEL}, repaired)`);
     return repaired;
   } catch (err) {
