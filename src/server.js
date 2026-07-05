@@ -77,6 +77,12 @@ async function sendFile(res, filePath, extraHeaders = {}) {
   }
 }
 
+// Client assets (HTML/JS/CSS) have no versioned filenames, so tell browsers to
+// always revalidate — after an update, returning players must not run stale
+// client code against a newer protocol. Generated games live at immutable
+// per-slug paths and stay cacheable.
+const NO_CACHE = { "Cache-Control": "no-cache" };
+
 // Serves a file from below baseDir, rejecting path traversal.
 async function sendFrom(res, baseDir, relPath, extraHeaders = {}) {
   const target = normalize(join(baseDir, normalize(relPath).replace(/^\/+/, "")));
@@ -95,7 +101,7 @@ const server = createServer(async (req, res) => {
     const method = req.method === "HEAD" ? "GET" : req.method;
 
     if (method === "GET" && path === "/") {
-      return await sendFile(res, join(PUBLIC_DIR, "index.html"));
+      return await sendFile(res, join(PUBLIC_DIR, "index.html"), NO_CACHE);
     }
 
     if (method === "GET" && path === "/healthz") {
@@ -109,7 +115,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "GET" && /^\/[\w.-]+\.(js|css|png)$/.test(path)) {
-      return await sendFrom(res, PUBLIC_DIR, path.slice(1));
+      return await sendFrom(res, PUBLIC_DIR, path.slice(1), NO_CACHE);
     }
 
     if (method === "GET" && path === "/api/games") {
