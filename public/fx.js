@@ -93,6 +93,18 @@ export const sound = {
     f.connect(envGain(ctx, t, 0.2, 0.4));
     noise.start(t);
   },
+  // short winner fanfare: ascending major triad + octave
+  fanfare() {
+    if (muted) return;
+    const ctx = ac(), t = ctx.currentTime;
+    const notes = [[523, 0, 0.25], [659, 0.13, 0.25], [784, 0.26, 0.25], [1046, 0.39, 0.7]];
+    for (const [freq, delay, decay] of notes) {
+      const o = ctx.createOscillator();
+      o.type = "triangle"; o.frequency.value = freq;
+      o.connect(envGain(ctx, t + delay, 0.18, decay));
+      o.start(t + delay); o.stop(t + delay + decay);
+    }
+  },
   // generic one-shot for game SFX
   blip(freq = 600, decay = 0.1, peak = 0.1, type = "square") {
     if (muted) return;

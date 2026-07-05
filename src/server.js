@@ -2,16 +2,17 @@ import { createServer } from "node:http";
 import { readFile, readdir } from "node:fs/promises";
 import { join, normalize, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { attachRooms } from "./rooms.js";
+import { attachRooms, roomCount, broadcastAll } from "./rooms.js";
 import { generatorInfo } from "./generator.js";
+import { cfg } from "./env.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const GAMES_DIR = join(ROOT, "games");
 const PUBLIC_DIR = join(ROOT, "public");
-const PORT = Number(process.env.FORGECADE_PORT ?? 4242);
+const PORT = Number(cfg.FORGECADE_PORT ?? 4242);
 // Bind to loopback by default; set FORGECADE_HOST=0.0.0.0 to open it up
 // (e.g. on the box your friends connect to).
-const HOST = process.env.FORGECADE_HOST ?? "127.0.0.1";
+const HOST = cfg.FORGECADE_HOST ?? "127.0.0.1";
 
 const MIME = {
   ".html": "text/html",
@@ -19,13 +20,18 @@ const MIME = {
   ".css": "text/css",
   ".json": "application/json",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
 };
 
 // Generated games are untrusted LLM output. The sandbox CSP gives them an
 // opaque origin: no access to the party frame, the WebSocket or the API —
 // they can only talk to the party frame via the SDK's postMessage bridge.
 const GAME_HEADERS = {
-  "Content-Security-Policy": "sandbox allow-scripts allow-pointer-lock",
+  "Content-Security-Policy":
+    "sandbox allow-scripts allow-pointer-lock; default-src 'none'; " +
+    "script-src 'self' 'unsafe-inline' https://cdn.babylonjs.com; " +
+    "style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; " +
+    "connect-src 'none'",
 };
 
 async function listGames() {
@@ -46,7 +52,9 @@ async function listGames() {
       // directory without meta.json — skip
     }
   }
-  return games.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sorted = games
+    .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  return { games: sorted.slice(0, 100), total: sorted.length };
 }
 
 function sendJson(res, status, body) {
@@ -87,12 +95,22 @@ const server = createServer(async (req, res) => {
       return await sendFile(res, join(PUBLIC_DIR, "index.html"));
     }
 
-    if (req.method === "GET" && /^\/[\w.-]+\.(js|css)$/.test(path)) {
+    if (req.method === "GET" && path === "/healthz") {
+      return sendJson(res, 200, {
+        ok: true,
+        uptime: process.uptime(),
+        rooms: roomCount(),
+        model: generatorInfo.model,
+        fake: generatorInfo.fake,
+      });
+    }
+
+    if (req.method === "GET" && /^\/[\w.-]+\.(js|css|png)$/.test(path)) {
       return await sendFrom(res, PUBLIC_DIR, path.slice(1));
     }
 
     if (req.method === "GET" && path === "/api/games") {
-      return sendJson(res, 200, { games: await listGames() });
+      return sendJson(res, 200, await listGames());
     }
 
     if (req.method === "GET" && path.startsWith("/games/")) {
@@ -109,7 +127,23 @@ const server = createServer(async (req, res) => {
   }
 });
 
-attachRooms(server, GAMES_DIR);
+attachRooms(server, GAMES_DIR, { accessCode: cfg.FORGECADE_ACCESS_CODE });
+
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[forgecade] ${signal} — shutting down`);
+  broadcastAll({
+    type: "toast",
+    message: "Server restarting — back in a moment, rejoin with your room code",
+  });
+  server.close();
+  // give the toast a moment to flush, then go
+  setTimeout(() => process.exit(0), 500);
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 server.listen(PORT, HOST, () => {
   console.log(`[forgecade] running on http://${HOST}:${PORT}`);

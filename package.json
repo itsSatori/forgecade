@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "description": "Self-hosted AI game generator",
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/server.js",
+    "start": "node src/server.js",
     "dev": "FORGECADE_FAKE_GENERATOR=1 node src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "repository": {
     "type": "git",

@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forgecade — the party game where the games don't exist yet</title>
+<meta name="description" content="Everyone types an idea, the dice picks one, the AI forges a multiplayer game on the spot. Open source, no accounts, one room code.">
+<meta property="og:title" content="Forgecade — the party game where the games don't exist yet">
+<meta property="og:description" content="Everyone types an idea, the dice picks one, the AI forges a multiplayer game on the spot.">
+<meta property="og:url" content="https://forgecade.com/">
+<meta property="og:image" content="https://forgecade.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='%23232323'%3E%3Cpath d='M4 22 Q2 10 18 9 L42 9 Q56 9 62 3 Q64 14 52 21 Q44 25 34 25 L15 25 Q7 25 4 22 Z'/%3E%3Cpath d='M20 25 L26 44 L38 44 L44 25 Z'/%3E%3Crect x='14' y='44' width='36' height='10' rx='3'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -42,9 +49,12 @@
   <div class="row"><input id="name" placeholder="your name" maxlength="24" autocomplete="off"></div>
   <div class="row"><button id="create" style="width:100%">Light the forge</button></div>
   <div class="row">
-    <input id="joincode" placeholder="room code" maxlength="4" style="text-transform:uppercase" autocomplete="off">
+    <input id="joincode" placeholder="room code" maxlength="4" style="text-transform:uppercase" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false">
     <button id="join" class="ghost">Join</button>
   </div>
+  <p class="center dim howitworks">everyone types an idea → the dice picks one → the AI forges a multiplayer game</p>
+  <p class="center dim" id="forged-count"></p>
+  <div class="warmup-slot" id="wslot-home"></div>
 </div>
 
 <!-- LOBBY ------------------------------------------------------------ -->
@@ -57,6 +67,12 @@
     <button id="start">Start the round</button>
     <p class="dim" id="lobby-wait" style="display:none">waiting for the host to light the fire…</p>
   </div>
+  <div class="lobby-tools">
+    <button id="copy-invite" class="ghost small">copy invite link</button>
+    <button id="leave-lobby" class="ghost small">leave</button>
+  </div>
+  <p class="center forge-error" id="lobby-error"></p>
+  <div class="replay-row" id="lobby-replay"></div>
   <div class="warmup-slot" id="wslot-lobby"></div>
   <p class="center dim tip" id="lobby-tip" style="margin-top:1.5rem"></p>
 </div>
@@ -74,6 +90,7 @@
     <span id="my-idea-text"></span>
   </div>
   <p class="dim center" id="submit-status" style="margin-top:1rem"></p>
+  <div class="golems sm" id="submit-golems"></div>
   <div class="warmup-slot" id="wslot-submitting"></div>
 </div>
 
@@ -129,11 +146,14 @@
 <!-- READY -------------------------------------------------------------------- -->
 <div class="view" id="view-ready">
   <h2 class="center ready-halo">It's ready.</h2>
+  <p class="center ready-title" id="ready-title"></p>
   <p class="center ready-idea" id="ready-idea"></p>
   <div class="center">
     <button id="play" class="go">Play it</button>
+    <button id="reforge" class="ghost">reforge</button>
     <p class="dim" id="ready-wait" style="display:none">waiting for the host to hit play…</p>
   </div>
+  <div class="warmup-slot" id="wslot-ready"></div>
 </div>
 
 <!-- PLAYING -------------------------------------------------------------------- -->
@@ -141,11 +161,32 @@
   <div id="topbar">
     <strong class="mono" id="top-code"></strong>
     <svg class="mini-hammer" id="mini-hammer" viewBox="0 0 24 24"><rect x="11" y="8" width="3" height="14" rx="1.5" fill="#6b5b47"/><rect x="6" y="2" width="14" height="8" rx="2" fill="#a89d8c"/></svg>
+    <div id="top-roster"></div>
     <span class="grow" id="top-status"></span>
     <button id="top-play" class="go" style="display:none">▶ next game</button>
+    <button id="top-skip" class="ghost" style="display:none">skip</button>
     <button id="top-round" class="ghost" style="display:none">new round</button>
+    <button id="top-endnight" class="ghost" style="display:none">end the night</button>
+    <button id="top-leave" class="ghost">leave</button>
   </div>
-  <iframe id="gameframe" sandbox="allow-scripts" title="the forged game"></iframe>
+  <div id="spectate-banner" hidden>You're spectating — you'll join the next game.</div>
+  <iframe id="gameframe" sandbox="allow-scripts allow-pointer-lock" title="the forged game"></iframe>
+  <div id="game-end" hidden>
+    <div class="winner-name" id="gameend-name"></div>
+    <div class="gameend-top" id="gameend-top"></div>
+    <p class="dim">tap anywhere to continue</p>
+  </div>
+</div>
+
+<!-- CEREMONY -------------------------------------------------------------------- -->
+<div class="view" id="view-ceremony">
+  <h2 class="center">The night's champions</h2>
+  <div class="podium" id="podium"></div>
+  <p class="center dim" id="ceremony-count"></p>
+  <div class="center" style="margin-top:1.5rem">
+    <button id="one-more" class="go" style="display:none">one more round</button>
+  </div>
+  <div class="replay-row" id="ceremony-replay"></div>
 </div>
 
 <div id="toast" role="status"></div>

@@ -98,6 +98,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
   font-size: 15px;
   margin: .2rem 0 3rem;
 }
+.howitworks { font-size: 13px; margin-top: 1.6rem; }
+#forged-count { font-size: 12px; margin-top: .4rem; min-height: 1.2em; }
 
 /* --- lobby ----------------------------------------------------------- */
 .plates { display: flex; justify-content: center; gap: .6rem; margin: 2rem 0; }
@@ -129,7 +131,27 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 }
 .golem-card.off { opacity: .35; }
 .golem-card.host .pname::before { content: "⚒ "; color: var(--sub); }
+.golem-card.pending { opacity: .35; }
+.golems.sm { gap: .9rem; margin: 1.2rem 0 0; }
+.golems.sm .golem-card { width: 64px; }
+.golems.sm .golem { width: 40px; height: 40px; }
 .tip { min-height: 1.6em; transition: opacity .4s; font-size: 13px; }
+
+button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
+.lobby-tools { display: flex; justify-content: center; gap: .6rem; margin-top: 1rem; }
+.forge-error { color: var(--alert); font-size: 13px; margin-top: .8rem; }
+.forge-error:empty { display: none; }
+
+/* replay chips (lobby + ceremony, host only) */
+.replay-row {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: .45rem; margin-top: 1.2rem; font-size: 12px;
+}
+.replay-row:empty { display: none; }
+.replay-row .chip {
+  padding: .4rem .8rem; font-size: 12px; border-radius: 9px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* --- idea round ------------------------------------------------------ */
 .fuse { height: 4px; background: var(--block-2); border-radius: 2px; margin: 1.2rem 0 2.2rem; overflow: hidden; }
@@ -174,6 +196,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 @keyframes stamp { from { opacity: 0; transform: scale(1.5); } }
 .ideas .card.chosen { background: var(--mark); transform: scale(1.02); }
 .ideas .card.dud { opacity: .38; }
+.ideas .card .byline {
+  display: flex; align-items: center; gap: .35rem;
+  font-size: 11px; color: var(--sub); margin-bottom: .3rem;
+}
+.byline .golem { width: 16px; height: 16px; animation: none; }
 
 /* --- forge scene ------------------------------------------------------- */
 #forge-scene { display: block; width: min(360px, 82%); margin: 1.6rem auto; }
@@ -194,13 +221,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 
 /* --- ready ------------------------------------------------------------- */
 .ready-halo { color: var(--go); }
-.ready-idea { font-size: 20px; letter-spacing: -0.02em; margin: 1rem 0 2.2rem; }
+.ready-title { font-size: 26px; letter-spacing: -0.03em; margin-top: 1rem; }
+.ready-idea { font-size: 16px; font-style: italic; color: var(--sub); margin: .4rem 0 2.2rem; }
 
 /* --- playing ------------------------------------------------------------ */
-#view-playing { max-width: none; padding: 0; height: 100vh; height: 100dvh; flex-direction: column; }
+#view-playing { max-width: none; padding: 0; height: 100vh; height: 100dvh; flex-direction: column; position: relative; }
 #view-playing.active { display: flex; }
 #topbar {
-  display: flex; align-items: center; gap: 1rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: .7rem;
   padding: .5rem 1rem;
   background: var(--paper);
   border-bottom: 1px solid var(--block-2);
@@ -211,7 +239,45 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--ink); outli
 #topbar .mini-hammer { width: 20px; height: 20px; animation: mini-strike 1s ease-in-out infinite; display: none; }
 #topbar .mini-hammer.on { display: block; }
 @keyframes mini-strike { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-35deg); } 55% { transform: rotate(6deg); } }
+#top-roster { display: flex; gap: 2px; }
+#top-roster .top-golem .golem { width: 22px; height: 22px; animation: none; }
+#top-roster .top-golem.off { opacity: .35; }
+#spectate-banner {
+  background: var(--mark); color: var(--ink);
+  font-size: 12px; text-align: center; padding: .4rem .8rem;
+  border-bottom: 1px solid var(--block-2);
+}
 #gameframe { flex: 1; border: 0; width: 100%; background: var(--ink); }
+
+/* winner overlay over the game */
+#game-end {
+  position: absolute; inset: 0; z-index: 6;
+  background: rgba(246, 246, 246, .95);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1.2rem; cursor: pointer; text-align: center;
+  animation: scene-in .35s cubic-bezier(.2,.9,.3,1) both;
+}
+#game-end[hidden] { display: none; }
+.winner-name { font-size: clamp(30px, 6vw, 44px); font-weight: 300; letter-spacing: -0.04em; }
+.gameend-top { display: flex; gap: 2rem; align-items: flex-end; }
+.gameend-top .golem { width: 64px; height: 64px; }
+.gameend-top .podium-slot:first-child .golem { width: 84px; height: 84px; }
+.gameend-top .pts { font-family: var(--mono); color: var(--sub); }
+
+/* --- ceremony ------------------------------------------------------------ */
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 1.2rem; margin: 2.4rem 0 1.6rem; }
+.podium-slot { text-align: center; width: 110px; }
+.podium .golem { width: 84px; height: 84px; }
+.podium .pedestal {
+  background: var(--block); border-radius: 12px 12px 0 0;
+  margin-top: .5rem; padding-top: .6rem;
+  display: flex; flex-direction: column;
+}
+.podium .place-1 .pedestal { height: 110px; background: var(--mark); }
+.podium .place-2 .pedestal { height: 80px; }
+.podium .place-3 .pedestal { height: 58px; }
+.podium .pedestal span:first-child { font-size: 24px; font-weight: 400; }
+.podium .pts { font-size: 12px; color: var(--sub); }
 
 /* --- toast / mute -------------------------------------------------------- */
 #toast {

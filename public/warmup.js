@@ -134,9 +134,10 @@ function freshFighter(spawn) {
   };
 }
 let me = freshFighter();
-const ghosts = new Map(); // id -> {x,y,gx,gy,face,dmg,anim,hammer,seen}
+const ghosts = new Map(); // id -> {x,y,gx,gy,face,dmg,anim,hammer,atkUntil,move,seen}
 let dummy = null;
 let keys = {}, lastSent = 0, lastTick = 0, hitVictims = new Set();
+let touchMoveId = null, touchJumpId = null, lastTapAt = 0;
 let sparks = [], dust = [], rings = [], trail = [];
 let shake = 0, freezeUntil = 0, bannerUntil = 0, blinkAt = 0;
 let hammer = null;        // {k, x, y, until} — the item on stage
@@ -448,6 +449,7 @@ function drawHud(t) {
 
 // --- main loop -----------------------------------------------------------------------------
 function frame(ts) {
+  raf = requestAnimationFrame(frame); // schedule first so the loop survives render exceptions
   const t = nowMs();
   const dt = Math.min(40, ts - (lastTick || ts - 16));
   lastTick = ts;
@@ -530,7 +532,7 @@ function frame(ts) {
     if (t - g.seen > 5000) continue;
     g.gx = g.gx === undefined ? g.x : g.gx + (g.x - g.gx) * 0.35;
     g.gy = g.gy === undefined ? g.y : g.gy + (g.y - g.gy) * 0.35;
-    const gf = { x: g.gx, y: g.gy, face: g.face, vx: 0, vy: g.anim === 2 ? 0.1 : 0, atkUntil: g.atk ? t + 1 : 0, stunUntil: g.anim === 3 ? t + 1 : 0, invulnUntil: 0 };
+    const gf = { x: g.gx, y: g.gy, face: g.face, vx: 0, vy: g.anim === 2 ? 0.1 : 0, atkUntil: g.atkUntil ?? 0, stunUntil: g.anim === 3 ? t + 1 : 0, invulnUntil: 0 };
     drawFighter(gf, id, GHOST, t, (names[id] ?? "?").toUpperCase().slice(0, 8), g.dmg, { anim: g.anim, hammer: g.hammer, move: g.move });
   }
 
@@ -594,13 +596,11 @@ function frame(ts) {
     cx.fillText("WARM-UP ARENA", W / 2, 48);
     cx.globalAlpha = 1;
   }
-
-  raf = requestAnimationFrame(frame);
 }
 
 // --- keyboard: WASD + space attack (arrows as fallback) --------------------------------------
 function keydown(e) {
-  if (e.target.tagName === "INPUT") return;
+  if (e.target.closest?.("input, textarea, button, select")) return;
   if (e.code === "KeyW" || e.code === "ArrowUp") { keys.jump = true; e.preventDefault(); }
   if (e.code === "KeyA" || e.code === "ArrowLeft") { keys.left = true; e.preventDefault(); }
   if (e.code === "KeyD" || e.code === "ArrowRight") { keys.right = true; e.preventDefault(); }
@@ -613,6 +613,37 @@ function keyup(e) {
   if (e.code === "KeyD" || e.code === "ArrowRight") keys.right = false;
   if (e.code === "KeyS" || e.code === "ArrowDown") keys.down = false;
   if (e.code === "Space") keys.attack = false;
+}
+function blurReset() { keys = {}; } // no stuck keys after tab switch
+
+// --- touch: hold a side to run, tap the top half to jump, double-tap to attack ---
+function pointerdown(e) {
+  e.preventDefault();
+  canvas.setPointerCapture?.(e.pointerId);
+  const rect = canvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * W;
+  const y = ((e.clientY - rect.top) / rect.height) * H;
+  const t = nowMs();
+  // double-tap = attack, but only a genuine single-finger double-tap: if another
+  // finger is already holding move or jump, this is the normal move+jump combo,
+  // not an attack.
+  if (t - lastTapAt < 280 && touchMoveId === null && touchJumpId === null) {
+    keys.attack = true; // released on pointerup
+  }
+  lastTapAt = t;
+  if (y < H / 2) {
+    touchJumpId = e.pointerId;
+    keys.jump = true;
+  } else {
+    touchMoveId = e.pointerId;
+    keys.left = x < me.x + F_W / 2;
+    keys.right = !keys.left;
+  }
+}
+function pointerup(e) {
+  if (e.pointerId === touchMoveId) { touchMoveId = null; keys.left = keys.right = false; }
+  if (e.pointerId === touchJumpId) { touchJumpId = null; keys.jump = false; }
+  keys.attack = false;
 }
 
 function resizeBacking() {
@@ -637,6 +668,7 @@ export const Warmup = {
 
   receive(data, from) {
     const t = nowMs();
+    const live = raf !== null; // unmounted: bookkeeping only, no fx
     if (data.p) {
       const prev = ghosts.get(from) ?? {};
       ghosts.set(from, {
@@ -646,13 +678,10 @@ export const Warmup = {
       });
     } else if (data.atk !== undefined) {
       const g = ghosts.get(from);
-      if (g) {
-        g.atk = true; g.move = data.atk;
-        setTimeout(() => { g.atk = false; }, MOVES[data.atk]?.dur ?? 120);
-      }
-      sound.blip(280, 0.05, 0.025, "sawtooth");
+      if (g) { g.atkUntil = t + (MOVES[data.atk]?.dur ?? 120); g.move = data.atk; }
+      if (live) sound.blip(280, 0.05, 0.025, "sawtooth");
     } else if (data.hit && data.hit.to === myId) {
-      if (t < me.invulnUntil) return;
+      if (!live || t < me.invulnUntil) return;
       applyKnock(me, data.hit.m, data.hit.dir, !!data.hit.boost);
       me.diving = false;
       burstAt(me.x + F_W / 2, me.y + F_H / 2, 8, INK);
@@ -660,6 +689,7 @@ export const Warmup = {
       shake = Math.max(shake, data.hit.boost ? 9 : 5);
       sound.clang(data.hit.boost ? 1.3 : 0.55);
     } else if (data.ko) {
+      if (!live) return;
       burstAt(data.ko.x ?? W / 2, data.ko.y ?? H / 2, 18, GHOST);
       shake = Math.max(shake, 7);
       sound.ding();
@@ -677,22 +707,28 @@ export const Warmup = {
       wrap.className = "warmup-wrap";
       canvas = document.createElement("canvas");
       canvas.className = "warmup";
+      canvas.style.touchAction = "none"; // pointer events handle every gesture
       wrap.appendChild(canvas);
       const cap = document.createElement("div");
       cap.className = "warmup-caption";
+      const coarse = matchMedia("(pointer: coarse)").matches;
       cap.innerHTML = `<span>Warm-up arena</span>
-        <span class="k">A/D move · W jump ×2 · S drop · SPACE attack (+dir) · grab the ⚒</span>`;
+        <span class="k">${coarse
+          ? "tap sides to move · tap top to jump · double-tap to attack"
+          : "A/D move · W jump ×2 · S drop · SPACE attack (+dir) · grab the ⚒"}</span>`;
       wrap.appendChild(cap);
       cx = canvas.getContext("2d");
-      addEventListener("keydown", keydown);
-      addEventListener("keyup", keyup);
-      canvas.addEventListener("pointerdown", () => {
-        if (me.jumps > 0) { me.vy = JUMP_V; me.jumps--; sound.blip(520, 0.09, 0.07); }
-      });
+      canvas.addEventListener("pointerdown", pointerdown);
+      canvas.addEventListener("pointerup", pointerup);
+      canvas.addEventListener("pointercancel", pointerup);
       ro = new ResizeObserver(resizeBacking);
       ro.observe(canvas);
       bannerUntil = nowMs() + 1800;
     }
+    // repeat mounts are fine: same handler refs, addEventListener dedupes
+    addEventListener("keydown", keydown);
+    addEventListener("keyup", keyup);
+    addEventListener("blur", blurReset);
     if (wrap.parentElement !== slot) slot.appendChild(wrap);
     resizeBacking();
     if (!raf) { lastTick = 0; raf = requestAnimationFrame(frame); }
@@ -700,6 +736,11 @@ export const Warmup = {
 
   unmount() {
     if (raf) { cancelAnimationFrame(raf); raf = null; }
+    removeEventListener("keydown", keydown);
+    removeEventListener("keyup", keyup);
+    removeEventListener("blur", blurReset);
+    keys = {};
+    touchMoveId = touchJumpId = null;
     wrap?.remove();
   },
 };
