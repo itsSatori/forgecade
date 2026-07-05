@@ -90,12 +90,15 @@ async function sendFrom(res, baseDir, relPath, extraHeaders = {}) {
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, "http://localhost").pathname;
+    // treat HEAD like GET for routing (link-preview bots probe with HEAD);
+    // nginx strips the body from HEAD responses at the edge
+    const method = req.method === "HEAD" ? "GET" : req.method;
 
-    if (req.method === "GET" && path === "/") {
+    if (method === "GET" && path === "/") {
       return await sendFile(res, join(PUBLIC_DIR, "index.html"));
     }
 
-    if (req.method === "GET" && path === "/healthz") {
+    if (method === "GET" && path === "/healthz") {
       return sendJson(res, 200, {
         ok: true,
         uptime: process.uptime(),
@@ -105,15 +108,15 @@ const server = createServer(async (req, res) => {
       });
     }
 
-    if (req.method === "GET" && /^\/[\w.-]+\.(js|css|png)$/.test(path)) {
+    if (method === "GET" && /^\/[\w.-]+\.(js|css|png)$/.test(path)) {
       return await sendFrom(res, PUBLIC_DIR, path.slice(1));
     }
 
-    if (req.method === "GET" && path === "/api/games") {
+    if (method === "GET" && path === "/api/games") {
       return sendJson(res, 200, await listGames());
     }
 
-    if (req.method === "GET" && path.startsWith("/games/")) {
+    if (method === "GET" && path.startsWith("/games/")) {
       const rel = path.slice("/games/".length) + (path.endsWith("/") ? "index.html" : "");
       const headers = rel.endsWith(".html") ? GAME_HEADERS : {};
       return await sendFrom(res, GAMES_DIR, rel, headers);
