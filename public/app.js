@@ -15,6 +15,7 @@ let lastGameErr = 0;                 // throttles in-game error toasts
 let gameEndTimer = null;
 let spectatingSlug = null, freshJoin = false;
 let playFlipTimer = null, lastReadySince = null;
+let qrCode = null;                   // room code the lobby QR was last drawn for
 
 // fixed palette for in-game player identity (V4) — bold enough for games
 const PALETTE = ["#4bb956", "#ff453a", "#ff9f43", "#5b8db8", "#c76a5a", "#8a63c2", "#2f9e8f", "#b58900"];
@@ -67,6 +68,14 @@ function send(msg) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringi
 function session() {
   try { return JSON.parse(sessionStorage.getItem("forgecade")); } catch { return null; }
 }
+const inviteUrl = () => `${location.origin}/?join=${state?.code ?? ""}`;
+
+// leave for good: tell the server to free our slot (so we don't linger as a
+// ghost), then tear the client back down to the home screen
+function leaveRoom() {
+  send({ type: "leave" });
+  resetToHome();
+}
 function resetToHome() {
   // stop and unload the game iframe first, or it keeps running (and playing
   // audio) invisibly on the home screen
@@ -78,7 +87,7 @@ function resetToHome() {
   phaseTimers.forEach(clearTimeout);
   phaseTimers = [];
   clearTimeout(bootWatch); bootWatch = null;
-  state = null; myId = null; prevPhase = null; spectatingSlug = null;
+  state = null; myId = null; prevPhase = null; spectatingSlug = null; qrCode = null;
   render();
 }
 
@@ -190,17 +199,53 @@ function renderLobby(isHost, entered) {
   show("lobby");
   $("lobby-plates").innerHTML = [...state.code]
     .map((c) => `<span class="plate">${c}</span>`).join("");
+  const connected = state.players.filter((p) => p.connected);
+  $("lobby-count").textContent = `${connected.length} / 16 gathered`;
+  $("lobby-empty").style.display = connected.length <= 1 ? "" : "none";
   $("lobby-players").innerHTML = state.players.map((p) => `
-    <div class="golem-card ${p.connected ? "" : "off"} ${p.id === state.hostId ? "host" : ""}">
+    <div class="golem-card ${p.connected ? "" : "off"} ${p.id === state.hostId ? "host" : ""} ${p.ready ? "ready" : ""}">
       ${avatarSVG(p.id)}<div class="pname">${esc(p.name)}</div>
     </div>`).join("");
   $("start").style.display = isHost ? "" : "none";
+  $("ready-toggle").style.display = isHost ? "none" : "";
+  const meReady = Boolean(state.players.find((p) => p.id === myId)?.ready);
+  $("ready-toggle").textContent = meReady ? "✓ ready" : "I'm ready";
+  $("ready-toggle").classList.toggle("on", meReady);
   $("lobby-wait").style.display = isHost ? "none" : "";
+  // host sees at a glance how much of the crew has readied up
+  if (isHost && connected.length > 1) {
+    const others = connected.length - 1;
+    const readyCount = connected.filter((p) => p.id !== state.hostId && p.ready).length;
+    $("start").textContent = readyCount === others
+      ? "Start the round — all set"
+      : `Start the round (${readyCount}/${others} ready)`;
+  } else {
+    $("start").textContent = "Start the round";
+  }
   $("lobby-error").textContent = state.forgeError ?? "";
   renderReplay($("lobby-replay"), isHost);
+  renderQR(state.code);
   if (entered) {
     sound.whoosh();
     rotateLine($("lobby-tip"), TIPS, 6000);
+  }
+}
+
+// Draws the join-link QR once per room (regenerating on every snapshot would be
+// wasteful). Uses the vendored MIT qrcode-generator; degrades to nothing if the
+// script failed to load — the code plates and copy/share links still work.
+function renderQR(code) {
+  const box = $("lobby-qr");
+  if (!box || qrCode === code) return;
+  if (typeof window.qrcode !== "function") { box.innerHTML = ""; return; }
+  try {
+    const qr = window.qrcode(0, "M");
+    qr.addData(inviteUrl());
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    qrCode = code;
+  } catch {
+    box.innerHTML = "";
   }
 }
 
@@ -597,14 +642,32 @@ $("top-play").onclick = () => send({ type: "play_next" });
 $("top-skip").onclick = () => send({ type: "skip_game" });
 $("reforge").onclick = () => send({ type: "discard_ready" });
 $("top-endnight").onclick = () => send({ type: "end_night" });
-$("top-leave").onclick = () => resetToHome();
-$("leave-lobby").onclick = () => resetToHome();
+$("top-leave").onclick = leaveRoom;
+$("leave-lobby").onclick = leaveRoom;
+$("ceremony-leave").onclick = leaveRoom;
+$("ready-toggle").onclick = () => { sound.blip(660, 0.1, 0.06); send({ type: "toggle_ready" }); };
 $("copy-invite").onclick = async () => {
   try {
-    await navigator.clipboard.writeText(`${location.origin}/?join=${state?.code ?? ""}`);
+    await navigator.clipboard.writeText(inviteUrl());
     toast("invite link copied — send it to your crew");
   } catch {
     toast("couldn't copy — the code works too");
+  }
+};
+// native share sheet on mobile; clipboard as the desktop fallback
+$("share-invite").onclick = async () => {
+  const url = inviteUrl();
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "Forgecade", text: `Join my Forgecade room ${state?.code ?? ""}`, url });
+    } catch { /* user dismissed the sheet — nothing to do */ }
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("invite link copied — send it to your crew");
+  } catch {
+    toast("couldn't share — the room code works too");
   }
 };
 for (const id of ["lobby-replay", "ceremony-replay"]) {

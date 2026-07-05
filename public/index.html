@@ -62,13 +62,26 @@
   <h2 class="center">The crew gathers</h2>
   <p class="center dim">shout this code across the internet:</p>
   <div class="plates" id="lobby-plates"></div>
+
+  <div class="join-panel">
+    <div class="qr-box"><div id="lobby-qr" role="img" aria-label="scan to join this room"></div></div>
+    <p class="dim qr-hint">point a phone camera here to join</p>
+    <div class="join-actions">
+      <button id="share-invite" class="ghost small">share invite</button>
+      <button id="copy-invite" class="ghost small">copy link</button>
+    </div>
+  </div>
+
+  <p class="center dim" id="lobby-count"></p>
   <div class="golems" id="lobby-players"></div>
+  <p class="center dim lobby-empty" id="lobby-empty" style="display:none">you're the first one here — share the code to fill the forge</p>
+
   <div class="center">
     <button id="start">Start the round</button>
+    <button id="ready-toggle" class="ghost" style="display:none">I'm ready</button>
     <p class="dim" id="lobby-wait" style="display:none">waiting for the host to light the fire…</p>
   </div>
   <div class="lobby-tools">
-    <button id="copy-invite" class="ghost small">copy invite link</button>
     <button id="leave-lobby" class="ghost small">leave</button>
   </div>
   <p class="center forge-error" id="lobby-error"></p>
@@ -205,12 +218,14 @@
   <p class="center dim" id="ceremony-count"></p>
   <div class="center" style="margin-top:1.5rem">
     <button id="one-more" class="go" style="display:none">one more round</button>
+    <button id="ceremony-leave" class="ghost">leave the forge</button>
   </div>
   <div class="replay-row" id="ceremony-replay"></div>
 </div>
 
 <div id="toast" role="status"></div>
 
+<script src="/qrcode.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

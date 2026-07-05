@@ -142,6 +142,22 @@ button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
 .forge-error { color: var(--alert); font-size: 13px; margin-top: .8rem; }
 .forge-error:empty { display: none; }
 
+/* join panel: scan-to-join QR + share / copy */
+.join-panel { display: flex; flex-direction: column; align-items: center; gap: .7rem; margin: 1.8rem auto 0; }
+.qr-box { background: #fff; border: 1px solid var(--block-2); border-radius: 16px; padding: 12px; line-height: 0; }
+.qr-box:has(#lobby-qr:empty) { display: none; }
+#lobby-qr svg { display: block; width: 132px; height: 132px; }
+.qr-hint { font-size: 12px; margin: 0; }
+.qr-box:has(#lobby-qr:empty) + .qr-hint { display: none; }
+.join-actions { display: flex; gap: .6rem; }
+#lobby-count { margin-top: 1.4rem; font-size: 13px; }
+.lobby-empty { font-size: 13px; margin-top: .2rem; }
+
+/* ready-up: a lobby-only "I'm in" signal */
+.golem-card.ready .pname::after { content: " ✓"; color: var(--go); }
+#ready-toggle.on { background: var(--go); color: #fff; }
+#ready-toggle.on:hover { background: #3fa64a; }
+
 /* replay chips (lobby + ceremony, host only) */
 .replay-row {
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center;

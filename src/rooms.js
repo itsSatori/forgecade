@@ -77,6 +77,7 @@ function snapshot(room) {
       id: p.id,
       name: p.name,
       connected: p.ws !== null,
+      ready: Boolean(p.ready),
     })),
     submitted: [...room.ideas.keys()],
     revealed: room.phase === "reveal"
@@ -114,6 +115,21 @@ function setTimer(room, ms, fn) {
 
 function connectedPlayers(room) {
   return [...room.players.values()].filter((p) => p.ws !== null);
+}
+
+// Keep an unattended room (only disconnected players left) alive for an hour so
+// a browser-crash rejoin still works, then drop it. Shared by the disconnect
+// path (handleClose) and the explicit-leave path (removePlayer).
+function scheduleReap(room) {
+  clearTimeout(room.reaper);
+  room.reaper = setTimeout(() => {
+    clearTimeout(room.timer);
+    clearTimeout(room.hostGrace);
+    forgeWaitlist.delete(room);
+    rooms.delete(room.code);
+    console.log(`[forgecade] room ${room.code} reaped`);
+  }, 60 * 60 * 1000);
+  room.reaper.unref();
 }
 
 function allConnectedSubmitted(room) {
@@ -257,10 +273,26 @@ const handlers = {
         room.players.delete(id);
       }
     }
+    for (const p of room.players.values()) p.ready = false; // ready is a lobby-only signal
     room.ideas = new Map();
     room.phase = "submitting";
     sync(room);
     setTimer(room, SUBMIT_MS, () => toReveal(room));
+  },
+
+  // player chose to leave for good — free their slot immediately (unlike a
+  // disconnect, which lingers for rejoin). Removes the ghost the lobby used to
+  // keep around and hands off the host role on the spot.
+  leave(room, player) {
+    console.log(`[forgecade] ${player.name} left ${room.code}`);
+    removePlayer(room, player);
+  },
+
+  // lobby-only "I'm ready" toggle — a social signal for the host, nothing gates
+  toggle_ready(room, player) {
+    if (room.phase !== "lobby") return;
+    player.ready = !player.ready;
+    sync(room);
   },
 
   idea(room, player, msg) {
@@ -379,6 +411,39 @@ function ensureHost(room) {
   }
 }
 
+// Cleanly evicts a player (explicit leave or, later, a kick). Unlike a
+// disconnect this frees the slot at once, reassigns the host if they held it,
+// keeps the submitting count honest, and reaps the room if it's now empty.
+function removePlayer(room, player) {
+  room.players.delete(player.id);
+  if (room.players.size === 0) {
+    // last player gone for good — tear the room down now
+    clearTimeout(room.timer);
+    clearTimeout(room.hostGrace);
+    clearTimeout(room.reaper);
+    forgeWaitlist.delete(room);
+    rooms.delete(room.code);
+    console.log(`[forgecade] room ${room.code} emptied — reaped`);
+    return;
+  }
+  const alive = connectedPlayers(room);
+  if (alive.length === 0) {
+    // only disconnected players remain — never crown a ghost as host; park the
+    // room for rejoin (a rejoin runs ensureHost and reclaims the crown).
+    scheduleReap(room);
+    return;
+  }
+  // an explicit leave vanishes from the roster, so diffPlayers can't announce
+  // it on the clients — tell the remaining crew directly
+  broadcast(room, { type: "toast", message: `${player.name} left the forge` });
+  if (player.id === room.hostId) room.hostId = alive[0].id; // hand off to a live player
+  if (room.phase === "submitting") {
+    room.ideas.delete(player.id);
+    if (allConnectedSubmitted(room)) return toReveal(room);
+  }
+  sync(room);
+}
+
 function joinRoom(room, ws, name) {
   const player = {
     id: randomUUID(),
@@ -386,6 +451,7 @@ function joinRoom(room, ws, name) {
     name: String(name ?? "").trim().slice(0, 24) || "Anon",
     ws,
     disconnectedAt: null,
+    ready: false,
   };
   room.players.set(player.id, player);
   room.hostId ??= player.id;
@@ -405,16 +471,7 @@ function handleClose(room, player) {
   player.disconnectedAt = Date.now();
   const alive = connectedPlayers(room);
   if (alive.length === 0) {
-    // Raum eine Stunde offen halten (Rejoin nach Browser-Crash), dann weg
-    clearTimeout(room.reaper);
-    room.reaper = setTimeout(() => {
-      clearTimeout(room.timer);
-      clearTimeout(room.hostGrace);
-      forgeWaitlist.delete(room);
-      rooms.delete(room.code);
-      console.log(`[forgecade] room ${room.code} reaped`);
-    }, 60 * 60 * 1000);
-    room.reaper.unref();
+    scheduleReap(room); // Raum offen halten für Rejoin nach Browser-Crash
     return;
   }
   // Host-Wechsel erst nach Karenzzeit — ein Seiten-Reload soll die
@@ -514,7 +571,7 @@ export function attachRooms(server, gamesDir, { accessCode } = {}) {
           } else if (msg.type === "join") {
             const target = rooms.get(String(msg.code ?? "").toUpperCase());
             if (!target) {
-              return ws.send(JSON.stringify({ type: "error", message: "Raum nicht gefunden" }));
+              return ws.send(JSON.stringify({ type: "error", message: "room not found" }));
             }
             if (target.players.size >= MAX_PLAYERS_PER_ROOM) {
               return ws.send(JSON.stringify({ type: "error", message: "room is full" }));
@@ -526,7 +583,7 @@ export function attachRooms(server, gamesDir, { accessCode } = {}) {
             const target = rooms.get(String(msg.code ?? "").toUpperCase());
             const existing = target?.players.get(msg.playerId);
             if (!existing || existing.token !== msg.token) {
-              return ws.send(JSON.stringify({ type: "error", message: "Rejoin fehlgeschlagen" }));
+              return ws.send(JSON.stringify({ type: "error", message: "rejoin failed — start fresh" }));
             }
             room = target;
             clearTimeout(room.reaper);
@@ -546,7 +603,9 @@ export function attachRooms(server, gamesDir, { accessCode } = {}) {
           return;
         }
 
-        if ((msg.type === "game" || msg.type === "warmup") && !allowRelay()) return;
+        // rate-limit the client messages that trigger a broadcast to the room,
+        // so a flood can't amplify into a sync/relay storm for everyone else
+        if ((msg.type === "game" || msg.type === "warmup" || msg.type === "toggle_ready") && !allowRelay()) return;
         if (Object.hasOwn(handlers, msg.type)) handlers[msg.type](room, player, msg);
       } catch (err) {
         console.warn("[forgecade] message handling failed:", err);
@@ -554,7 +613,10 @@ export function attachRooms(server, gamesDir, { accessCode } = {}) {
     });
 
     ws.on("close", () => {
-      if (room && player && player.ws === ws) handleClose(room, player);
+      // skip if the player already left/was removed — removePlayer handled it
+      if (room && player && player.ws === ws && room.players.has(player.id)) {
+        handleClose(room, player);
+      }
     });
   });
 }
