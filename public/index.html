@@ -64,8 +64,6 @@
   <div class="plates" id="lobby-plates"></div>
 
   <div class="join-panel">
-    <div class="qr-box"><div id="lobby-qr" role="img" aria-label="scan to join this room"></div></div>
-    <p class="dim qr-hint">point a phone camera here to join</p>
     <div class="join-actions">
       <button id="share-invite" class="ghost small">share invite</button>
       <button id="copy-invite" class="ghost small">copy link</button>
@@ -173,6 +171,7 @@
   <div class="molten-bar"><div id="forge-bar" style="width:0%"></div></div>
   <p class="center dim" id="forge-kb"></p>
   <p class="center dim forge-line" id="forge-line"></p>
+  <div class="center"><button id="cancel-forge" class="ghost small" style="display:none">douse the flames</button></div>
   <div class="warmup-slot" id="wslot-forging"></div>
 </div>
 
@@ -225,7 +224,6 @@
 
 <div id="toast" role="status"></div>
 
-<script src="/qrcode.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

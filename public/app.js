@@ -15,7 +15,6 @@ let lastGameErr = 0;                 // throttles in-game error toasts
 let gameEndTimer = null;
 let spectatingSlug = null, freshJoin = false;
 let playFlipTimer = null, lastReadySince = null;
-let qrCode = null;                   // room code the lobby QR was last drawn for
 
 // fixed palette for in-game player identity (V4) — bold enough for games
 const PALETTE = ["#4bb956", "#ff453a", "#ff9f43", "#5b8db8", "#c76a5a", "#8a63c2", "#2f9e8f", "#b58900"];
@@ -87,7 +86,7 @@ function resetToHome() {
   phaseTimers.forEach(clearTimeout);
   phaseTimers = [];
   clearTimeout(bootWatch); bootWatch = null;
-  state = null; myId = null; prevPhase = null; spectatingSlug = null; qrCode = null;
+  state = null; myId = null; prevPhase = null; spectatingSlug = null;
   render();
 }
 
@@ -224,28 +223,9 @@ function renderLobby(isHost, entered) {
   }
   $("lobby-error").textContent = state.forgeError ?? "";
   renderReplay($("lobby-replay"), isHost);
-  renderQR(state.code);
   if (entered) {
     sound.whoosh();
     rotateLine($("lobby-tip"), TIPS, 6000);
-  }
-}
-
-// Draws the join-link QR once per room (regenerating on every snapshot would be
-// wasteful). Uses the vendored MIT qrcode-generator; degrades to nothing if the
-// script failed to load — the code plates and copy/share links still work.
-function renderQR(code) {
-  const box = $("lobby-qr");
-  if (!box || qrCode === code) return;
-  if (typeof window.qrcode !== "function") { box.innerHTML = ""; return; }
-  try {
-    const qr = window.qrcode(0, "M");
-    qr.addData(inviteUrl());
-    qr.make();
-    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
-    qrCode = code;
-  } catch {
-    box.innerHTML = "";
   }
 }
 
@@ -350,6 +330,7 @@ function renderDice(list) {
 function renderForging(entered) {
   show("forging");
   $("forge-idea").textContent = state.forging?.idea ?? "";
+  $("cancel-forge").style.display = state.hostId === myId ? "" : "none";
   updateForgeProgress($("forge-bar"), $("forge-kb"));
   if (entered) {
     lastProgress = -1;
@@ -641,6 +622,7 @@ $("play").onclick = () => send({ type: "play_next" });
 $("top-play").onclick = () => send({ type: "play_next" });
 $("top-skip").onclick = () => send({ type: "skip_game" });
 $("reforge").onclick = () => send({ type: "discard_ready" });
+$("cancel-forge").onclick = () => send({ type: "cancel_forge" });
 $("top-endnight").onclick = () => send({ type: "end_night" });
 $("top-leave").onclick = leaveRoom;
 $("leave-lobby").onclick = leaveRoom;

@@ -123,6 +123,7 @@ function connectedPlayers(room) {
 function scheduleReap(room) {
   clearTimeout(room.reaper);
   room.reaper = setTimeout(() => {
+    room.forging?.abort.abort(); // safety net — no stream may outlive its room
     clearTimeout(room.timer);
     clearTimeout(room.hostGrace);
     forgeWaitlist.delete(room);
@@ -184,7 +185,8 @@ async function startForge(room, index) {
   const [entry] = room.queue.splice(index, 1);
   if (!entry) return;
   room.rolling = null;
-  room.forging = { idea: entry.idea, progress: 0 };
+  const abort = new AbortController();
+  room.forging = { idea: entry.idea, progress: 0, abort };
   room.forgeError = null;
   room.phase = room.currentGame ? "playing" : "forging";
   sync(room);
@@ -195,6 +197,7 @@ async function startForge(room, index) {
   try {
     let lastSync = 0;
     const html = await generateGame(entry.idea, {
+      signal: abort.signal,
       onProgress: (chars) => {
         room.forging.progress = chars;
         if (Date.now() - lastSync > 1000) {
@@ -226,8 +229,18 @@ async function startForge(room, index) {
     );
     sync(room);
   } catch (err) {
-    console.error(`[forgecade] ${room.code} forge failed for "${entry.idea}":`, err.message);
     room.forging = null;
+    if (abort.signal.aborted) {
+      // deliberate cancel (host, dissolved lobby, ended night) — the idea is
+      // dropped for good: no retry, no error banner
+      console.log(`[forgecade] ${room.code} forge cancelled: "${entry.idea}"`);
+      if (!rooms.has(room.code)) return; // room already torn down
+      if (room.phase === "ceremony") return sync(room);
+      if (room.queue.length > 0 && connectedPlayers(room).length > 0) return toRolling(room);
+      if (room.phase === "forging") room.phase = room.readyGame ? "ready" : "lobby";
+      return sync(room);
+    }
+    console.error(`[forgecade] ${room.code} forge failed for "${entry.idea}":`, err.message);
     room.forgeError = `the forge choked on: ${entry.idea}`;
     if (!entry.retried) {
       entry.retried = true; // one more roll, then it's out
@@ -295,6 +308,15 @@ const handlers = {
     sync(room);
   },
 
+  // host pulls the plug on a forge in progress — the stream is torn down at
+  // once (no tokens wasted on a dud idea) and the next queued idea rolls
+  cancel_forge(room, player) {
+    if (player.id !== room.hostId || !room.forging) return;
+    if (room.forging.abort.signal.aborted) return; // already cancelling
+    broadcast(room, { type: "toast", message: "the host doused the forge" });
+    room.forging.abort.abort(); // startForge's catch reroutes the room
+  },
+
   idea(room, player, msg) {
     if (room.phase !== "submitting") return;
     const text = String(msg.text ?? "").trim().slice(0, MAX_IDEA_LENGTH);
@@ -351,6 +373,11 @@ const handlers = {
     room.rolling = null;
     room.currentGame = null;
     room.gameEnded = false;
+    // the night is over — nothing left to build: drop the queue and stop a
+    // forge mid-swing instead of burning tokens for a scoreboard screen
+    room.queue = [];
+    forgeWaitlist.delete(room);
+    room.forging?.abort.abort();
     room.phase = "ceremony";
     sync(room);
   },
@@ -417,7 +444,9 @@ function ensureHost(room) {
 function removePlayer(room, player) {
   room.players.delete(player.id);
   if (room.players.size === 0) {
-    // last player gone for good — tear the room down now
+    // last player gone for good — tear the room down now, including a forge
+    // still streaming: nobody is left to play what it's building
+    room.forging?.abort.abort();
     clearTimeout(room.timer);
     clearTimeout(room.hostGrace);
     clearTimeout(room.reaper);
@@ -429,7 +458,10 @@ function removePlayer(room, player) {
   const alive = connectedPlayers(room);
   if (alive.length === 0) {
     // only disconnected players remain — never crown a ghost as host; park the
-    // room for rejoin (a rejoin runs ensureHost and reclaims the crown).
+    // room for rejoin (a rejoin runs ensureHost and reclaims the crown). The
+    // last *live* player chose to walk out, so stop the forge too — unlike a
+    // transient disconnect (handleClose), nobody here is coming back for it.
+    room.forging?.abort.abort();
     scheduleReap(room);
     return;
   }

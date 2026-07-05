@@ -243,7 +243,7 @@ async function archiveFailedForge(idea, text, error) {
 
 // Streams one generation attempt and returns the raw text — callers extract
 // and validate. charOffset keeps onProgress monotonic across repair rounds.
-async function requestGame(messages, onProgress, charOffset = 0) {
+async function requestGame(messages, onProgress, charOffset = 0, signal) {
   const request = {
     model: MODEL,
     max_tokens: MAX_TOKENS,
@@ -267,6 +267,11 @@ async function requestGame(messages, onProgress, charOffset = 0) {
   };
   const totalTimer = setTimeout(() => abort("generation timed out"), FORGE_TIMEOUT_MS);
   const stallTimer = setTimeout(() => abort("stream stalled"), STALL_MS);
+  // external cancellation (host doused the forge, lobby dissolved) — same path
+  // as the watchdogs, so the stream is torn down immediately
+  const onCancel = () => abort("forge cancelled");
+  if (signal?.aborted) onCancel();
+  else signal?.addEventListener("abort", onCancel, { once: true });
 
   const stream = client.messages.stream(request, { signal: controller.signal });
 
@@ -286,6 +291,7 @@ async function requestGame(messages, onProgress, charOffset = 0) {
   } finally {
     clearTimeout(totalTimer);
     clearTimeout(stallTimer);
+    signal?.removeEventListener("abort", onCancel);
   }
   const text = message.content
     .filter((block) => block.type === "text")
@@ -294,10 +300,11 @@ async function requestGame(messages, onProgress, charOffset = 0) {
   return { text, stopReason: message.stop_reason, chars };
 }
 
-export async function generateGame(idea, { onProgress } = {}) {
+export async function generateGame(idea, { onProgress, signal } = {}) {
   if (FAKE) {
     for (let i = 1; i <= 3; i++) {
       await new Promise((r) => setTimeout(r, 1000));
+      if (signal?.aborted) throw new Error("forge cancelled");
       onProgress?.(i * 1000);
     }
     validateGameHtml(FAKE_GAME);
@@ -309,9 +316,9 @@ export async function generateGame(idea, { onProgress } = {}) {
 
   let first;
   try {
-    first = await requestGame(base, onProgress);
+    first = await requestGame(base, onProgress, 0, signal);
   } catch (err) {
-    await archiveFailedForge(idea, "", err.message);
+    if (!signal?.aborted) await archiveFailedForge(idea, "", err.message);
     throw err;
   }
 
@@ -350,6 +357,7 @@ export async function generateGame(idea, { onProgress } = {}) {
       ],
       onProgress,
       first.chars,
+      signal,
     );
     lastText = second.text;
     if (second.stopReason === "max_tokens") {
@@ -360,7 +368,7 @@ export async function generateGame(idea, { onProgress } = {}) {
     console.log(`[forgecade] forged "${idea}" in ${Date.now() - started}ms (${MODEL}, repaired)`);
     return repaired;
   } catch (err) {
-    await archiveFailedForge(idea, lastText, err.message);
+    if (!signal?.aborted) await archiveFailedForge(idea, lastText, err.message);
     throw err;
   }
 }
