@@ -128,6 +128,9 @@ identical; the audio, dramaturgy and announcer sections are engine-independent.
   SPECTATING banner, or drop in comically (sky-fall spawn) if safely possible.
 - Round flow: CLICK/TAP TO START poster (section 3) -> INTRO -> COUNTDOWN ->
   PLAY 60-120s -> SUDDEN_DEATH only if tied -> CEREMONY -> Forgecade.end.
+  The start gate must work for EVERYONE: the host's own click starts the phase
+  machine directly; a non-host's click unlocks audio and sends a start intent
+  the host honors. A host clicking alone in the room must be able to start.
   One mode. No difficulty settings, no meta-progression, no volume UI, no
   play-again button — the platform owns everything after end().
 - Take the absurd idea MECHANICALLY seriously, never as a reskin. Right after
@@ -391,8 +394,11 @@ if one fails, fix the code first. Do not output this list.
    2s; joins and leaves never throw; paused flag halts the loop.
 4. rand=rng(ctx.seed||1) used at load only; AudioContext created inside the
    first pointer handler; AC.suspend/resume guarded on pause/resume.
-5. Every called function is defined, every referenced DOM id exists; no
-   allocation, gradient/canvas creation, shadowBlur or ctx.filter in the loop.
+5. Every identifier is defined IN THE SCOPE where it is used — a const defined
+   inside one function does not exist in another (classic crash: defining the
+   rng instance inside startGame but calling it in a spawn function; make
+   shared helpers top-level). Every referenced DOM id exists; no allocation,
+   gradient/canvas creation, shadowBlur or ctx.filter in the loop.
 6. 8+ distinct enveloped sfx mapped; big events layer 2+ voices; music
    scheduler runs in PLAY, speeds up in LAST10, stops before the fanfare;
    ambient bed running; nothing audible before the first click.
