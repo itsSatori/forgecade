@@ -134,7 +134,7 @@ function freshFighter(spawn) {
   };
 }
 let me = freshFighter();
-const ghosts = new Map(); // id -> {x,y,gx,gy,face,dmg,anim,hammer,atkUntil,move,seen}
+const ghosts = new Map(); // id -> {x,y,seen, px,py,pt (prior snapshot), face,dmg,anim,hammer,atkUntil,move}
 let dummy = null;
 let keys = {}, lastSent = 0, lastTick = 0, hitVictims = new Set();
 let touchMoveId = null, touchJumpId = null, lastTapAt = 0;
@@ -497,7 +497,7 @@ function frame(ts) {
     if (trail.length > 5) trail.shift();
   }
 
-  if (ts - lastSent > 100) {
+  if (ts - lastSent > 50) {
     lastSent = ts;
     const anim = t < me.stunUntil ? 3 : t < me.atkUntil ? 2 : Math.abs(me.vx) > 0.05 ? 1 : 0;
     sendFn({ p: [Math.round(me.x), Math.round(me.y), me.face, Math.floor(me.dmg), anim, t < myHammerUntil ? 1 : 0, me.move] });
@@ -527,12 +527,21 @@ function frame(ts) {
     cx.globalAlpha = 1;
   }
 
-  // ghosts with smoothing
+  // ghosts, rendered one send-interval (~60ms) in the past and interpolated
+  // between the last two snapshots — remote fighters move as smoothly as the
+  // local one; the delay must match the 50ms send rate so the render time
+  // always falls inside the buffered snapshot pair
   for (const [id, g] of ghosts) {
     if (t - g.seen > 5000) continue;
-    g.gx = g.gx === undefined ? g.x : g.gx + (g.x - g.gx) * 0.35;
-    g.gy = g.gy === undefined ? g.y : g.gy + (g.y - g.gy) * 0.35;
-    const gf = { x: g.gx, y: g.gy, face: g.face, vx: 0, vy: g.anim === 2 ? 0.1 : 0, atkUntil: g.atkUntil ?? 0, stunUntil: g.anim === 3 ? t + 1 : 0, invulnUntil: 0 };
+    let gx = g.x, gy = g.y;
+    const span = g.seen - g.pt;
+    // skip interpolation across teleports (respawn) and stale gaps
+    if (span > 0 && span < 400 && Math.hypot(g.x - g.px, g.y - g.py) < 200) {
+      const k = Math.max(0, Math.min(1, (t - 60 - g.pt) / span));
+      gx = g.px + (g.x - g.px) * k;
+      gy = g.py + (g.y - g.py) * k;
+    }
+    const gf = { x: gx, y: gy, face: g.face, vx: 0, vy: g.anim === 2 ? 0.1 : 0, atkUntil: g.atkUntil ?? 0, stunUntil: g.anim === 3 ? t + 1 : 0, invulnUntil: 0 };
     drawFighter(gf, id, GHOST, t, (names[id] ?? "?").toUpperCase().slice(0, 8), g.dmg, { anim: g.anim, hammer: g.hammer, move: g.move });
   }
 
@@ -673,6 +682,8 @@ export const Warmup = {
       const prev = ghosts.get(from) ?? {};
       ghosts.set(from, {
         ...prev,
+        // previous snapshot, kept for interpolated rendering
+        px: prev.x ?? data.p[0], py: prev.y ?? data.p[1], pt: prev.seen ?? t,
         x: data.p[0], y: data.p[1], face: data.p[2], dmg: data.p[3],
         anim: data.p[4], hammer: !!data.p[5], move: data.p[6], seen: t,
       });
