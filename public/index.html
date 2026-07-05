@@ -110,28 +110,48 @@
 <div class="view" id="view-forging">
   <h2 class="center">The forge is working</h2>
   <p class="center dim" id="forge-idea" style="font-style:italic"></p>
-  <svg id="forge-scene" viewBox="0 0 380 220" role="img" aria-label="animated forge">
-    <ellipse class="glow" cx="160" cy="190" rx="150" ry="26" fill="#ff9f43" opacity=".14"/>
-    <ellipse cx="160" cy="196" rx="120" ry="10" fill="#000" opacity=".08"/>
+  <svg id="forge-scene" viewBox="0 0 380 220" role="img" aria-label="a forge hammering a glowing game into shape">
+    <!-- ground glow + shadow -->
+    <ellipse class="glow" cx="188" cy="196" rx="150" ry="24" fill="#ff9f43" opacity=".14"/>
+    <ellipse cx="188" cy="200" rx="120" ry="9" fill="#000" opacity=".08"/>
     <!-- fire pit -->
-    <path d="M40 196 Q34 168 62 164 L98 164 Q118 166 116 196 Z" fill="#e4e4e4"/>
-    <g>
-      <path d="M64 176 Q58 156 78 148 Q76 162 88 166 Q94 154 98 146 Q108 162 96 178 Q82 188 64 176 Z" fill="#ff9f43">
-        <animate attributeName="opacity" values="1;.6;1" dur="1.1s" repeatCount="indefinite"/>
+    <path d="M40 200 Q34 172 62 168 L98 168 Q118 170 116 200 Z" fill="#e4e4e4"/>
+    <g class="flames">
+      <path d="M64 180 Q58 160 78 152 Q76 166 88 170 Q94 158 98 150 Q108 166 96 182 Q82 192 64 180 Z" fill="#ff9f43">
+        <animate attributeName="opacity" values="1;.55;1" dur="1.1s" repeatCount="indefinite"/>
       </path>
-      <path d="M72 172 Q70 160 82 156 Q82 166 90 170 Q84 178 72 172 Z" fill="#fef991">
+      <path d="M72 176 Q70 164 82 160 Q82 170 90 174 Q84 182 72 176 Z" fill="#fef991">
         <animate attributeName="opacity" values=".8;1;.8" dur="0.7s" repeatCount="indefinite"/>
       </path>
     </g>
+    <!-- embers drifting up from the fire -->
+    <g fill="#ff9f43">
+      <circle class="ember ember-1" cx="70" cy="168" r="2.2"/>
+      <circle class="ember ember-2" cx="84" cy="166" r="1.6"/>
+      <circle class="ember ember-3" cx="60" cy="170" r="1.8"/>
+      <circle class="ember ember-4" cx="92" cy="168" r="1.4"/>
+    </g>
     <!-- anvil -->
-    <rect x="146" y="178" width="76" height="12" rx="3" fill="#7b7b7b"/>
-    <path d="M160 178 L166 152 L202 152 L208 178 Z" fill="#4d4d4d"/>
-    <path d="M128 128 Q126 118 142 116 L232 116 Q258 116 266 106 Q270 118 256 127 Q244 134 224 134 L156 134 Q136 134 128 128 Z" fill="#232323"/>
-    <!-- workpiece -->
-    <rect class="workpiece" x="162" y="108" width="52" height="9" rx="4.5" fill="#ff9f43">
-      <animate attributeName="fill" values="#ff9f43;#fabf5c;#ff9f43" dur="1.6s" repeatCount="indefinite"/>
-    </rect>
-    <!-- hammer arm -->
+    <rect x="150" y="182" width="76" height="12" rx="3" fill="#7b7b7b"/>
+    <path d="M164 182 L170 156 L206 156 L212 182 Z" fill="#4d4d4d"/>
+    <g class="anvil-top">
+      <path d="M132 132 Q130 122 146 120 L236 120 Q262 120 270 110 Q274 122 260 131 Q248 138 228 138 L160 138 Q140 138 132 132 Z" fill="#232323"/>
+      <!-- workpiece: the glowing game-to-be -->
+      <rect class="workpiece" x="166" y="112" width="52" height="9" rx="4.5" fill="#ff9f43"/>
+    </g>
+    <!-- impact flash + shock ring -->
+    <circle class="impact-flash" cx="190" cy="114" r="10" fill="#fef991"/>
+    <circle class="shock-ring" cx="190" cy="114" r="6" fill="none" stroke="#fef991" stroke-width="2"/>
+    <!-- sparks that fly on each strike -->
+    <g class="sparks" fill="#fef991">
+      <g transform="translate(190 113) rotate(-158)"><rect class="spark" x="0" y="-1.1" width="7" height="2.2" rx="1.1"/></g>
+      <g transform="translate(190 113) rotate(-130)"><rect class="spark" x="0" y="-1.1" width="9" height="2.2" rx="1.1"/></g>
+      <g transform="translate(190 113) rotate(-104)"><rect class="spark" x="0" y="-1.1" width="8" height="2.2" rx="1.1"/></g>
+      <g transform="translate(190 113) rotate(-78)"><rect class="spark" x="0" y="-1.1" width="9" height="2.2" rx="1.1"/></g>
+      <g transform="translate(190 113) rotate(-52)"><rect class="spark" x="0" y="-1.1" width="7" height="2.2" rx="1.1"/></g>
+      <g transform="translate(190 113) rotate(-24)"><rect class="spark" x="0" y="-1.1" width="6" height="2.2" rx="1.1"/></g>
+    </g>
+    <!-- hammer -->
     <g class="arm">
       <rect x="240" y="40" width="8" height="60" rx="4" fill="#7b7b7b"/>
       <rect x="226" y="26" width="36" height="20" rx="5" fill="#232323"/>

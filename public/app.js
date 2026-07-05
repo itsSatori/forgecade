@@ -309,6 +309,7 @@ function renderForging(entered) {
   if (entered) {
     lastProgress = -1;
     rotateLine($("forge-line"), FORGE_LINES, 3500);
+    startForgeRhythm();
   }
 }
 
@@ -317,26 +318,36 @@ function updateForgeProgress(bar, label) {
   const kb = Math.round(p / 1024);
   label.textContent = `${kb} KB of pure nonsense forged`;
   bar.style.width = Math.min(95, kb * 1.5) + "%";
-  if (p > lastProgress) {
-    lastProgress = p;
-    strikeAnvil();
-  }
+  lastProgress = p;
 }
 
-function strikeAnvil() {
+// The hammer swings via a self-driving CSS loop, so it never freezes while the
+// model thinks. We only need to land the clang + spark burst on each visual
+// impact — so we lock our audio clock to the CSS animation's own iteration
+// boundaries (re-synced every cycle, so it can't drift out of phase).
+const FORGE_CYCLE = 1150;   // must match the CSS animation-duration
+const FORGE_IMPACT = 0.42;  // must match the slam keyframe %
+let forgeImpactTimer = null;
+function startForgeRhythm() {
   const arm = document.querySelector("#forge-scene .arm");
   if (!arm) return;
-  arm.classList.remove("strike");
-  void arm.offsetWidth; // restart animation
-  arm.classList.add("strike");
-  setTimeout(() => {
-    sound.clang(0.7);
-    const scene = $("forge-scene").getBoundingClientRect();
-    if (scene.width) {
-      burst((scene.x + scene.width * 0.42) / innerWidth,
-            (scene.y + scene.height * 0.55) / innerHeight, 14, 4);
-    }
-  }, 140);
+  const schedule = () => {
+    clearTimeout(forgeImpactTimer);
+    forgeImpactTimer = setTimeout(forgeImpact, FORGE_CYCLE * FORGE_IMPACT);
+  };
+  arm.onanimationstart = schedule;      // fires when the forging view appears
+  arm.onanimationiteration = schedule;  // fires at every cycle boundary
+  schedule();                           // cover the first swing already in flight
+}
+
+function forgeImpact() {
+  if (!$("view-forging").classList.contains("active")) return;
+  sound.clang(0.5 + Math.random() * 0.25);
+  const scene = $("forge-scene").getBoundingClientRect();
+  if (scene.width) {
+    burst((scene.x + scene.width * 0.5) / innerWidth,
+          (scene.y + scene.height * 0.52) / innerHeight, 10, 4);
+  }
 }
 
 function renderReady(isHost, entered) {

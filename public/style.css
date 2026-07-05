@@ -203,16 +203,74 @@ button.small { padding: .5rem .9rem; font-size: 13px; border-radius: 9px; }
 .byline .golem { width: 16px; height: 16px; animation: none; }
 
 /* --- forge scene ------------------------------------------------------- */
-#forge-scene { display: block; width: min(360px, 82%); margin: 1.6rem auto; }
-#forge-scene .arm { transform-origin: 245px 96px; }
-#forge-scene .arm.strike { animation: strike .3s ease-in both; }
-@keyframes strike {
-  0% { transform: rotate(0deg); }
-  45% { transform: rotate(-52deg); }
-  70% { transform: rotate(6deg); }
-  100% { transform: rotate(0deg); }
+/* The hammer swings on its own, forever — it never waits on the network, so
+   the forge stays alive even while the model is thinking with no new bytes. */
+#forge-scene { display: block; width: min(360px, 82%); margin: 1.6rem auto; overflow: visible; }
+#forge-scene .arm { transform-box: view-box; transform-origin: 245px 96px; animation: forge-swing 1.15s cubic-bezier(.5, 0, .2, 1) infinite; }
+@keyframes forge-swing {
+  0%, 14% { transform: rotate(24deg); }   /* cocked back, held a beat */
+  42%     { transform: rotate(-64deg); }  /* SLAM — head down onto the workpiece */
+  54%     { transform: rotate(-40deg); }  /* rebound */
+  100%    { transform: rotate(24deg); }   /* raise back up */
 }
-#forge-scene .workpiece { filter: drop-shadow(0 0 7px rgba(255, 159, 67, .75)); }
+
+/* workpiece flashes white-hot on each strike */
+#forge-scene .workpiece { animation: forge-heat 1.15s ease-out infinite; }
+@keyframes forge-heat {
+  0%, 36%  { fill: #ff9f43; filter: drop-shadow(0 0 5px rgba(255, 159, 67, .6)); }
+  42%      { fill: #fff7d6; filter: drop-shadow(0 0 12px rgba(254, 249, 145, .95)); }
+  72%,100% { fill: #ff9f43; filter: drop-shadow(0 0 6px rgba(255, 159, 67, .7)); }
+}
+
+/* the anvil takes the blow */
+#forge-scene .anvil-top { animation: forge-recoil 1.15s ease-out infinite; }
+@keyframes forge-recoil {
+  0%, 38%, 100% { transform: translateY(0); }
+  42%           { transform: translateY(1.5px); }
+  56%           { transform: translateY(0); }
+}
+
+/* impact flash + expanding shock ring, timed to the slam (42%) */
+#forge-scene .impact-flash { transform-box: view-box; transform-origin: 190px 114px; opacity: 0; animation: forge-flash 1.15s ease-out infinite; }
+@keyframes forge-flash {
+  0%, 38%  { opacity: 0; transform: scale(.3); }
+  42%      { opacity: .9; transform: scale(1); }
+  58%,100% { opacity: 0; transform: scale(1.3); }
+}
+#forge-scene .shock-ring { transform-box: view-box; transform-origin: 190px 114px; opacity: 0; animation: forge-ring 1.15s ease-out infinite; }
+@keyframes forge-ring {
+  0%, 40%  { opacity: 0; transform: scale(.4); }
+  44%      { opacity: .7; transform: scale(1); }
+  66%,100% { opacity: 0; transform: scale(2.4); }
+}
+
+/* sparks fan out from the impact point */
+#forge-scene .spark { opacity: 0; animation: forge-spark 1.15s ease-out infinite; }
+@keyframes forge-spark {
+  0%, 38%  { opacity: 0; transform: translateX(0); }
+  43%      { opacity: 1; transform: translateX(6px); }
+  68%,100% { opacity: 0; transform: translateX(30px); }
+}
+/* vary the reach per spark so the burst reads organic (timing stays locked) */
+#forge-scene .sparks > g:nth-child(2) .spark,
+#forge-scene .sparks > g:nth-child(4) .spark { animation-name: forge-spark-far; }
+@keyframes forge-spark-far {
+  0%, 38%  { opacity: 0; transform: translateX(0); }
+  43%      { opacity: 1; transform: translateX(9px); }
+  64%,100% { opacity: 0; transform: translateX(40px); }
+}
+
+/* embers drift up off the fire */
+#forge-scene .ember { opacity: 0; animation: ember-rise 2.4s ease-in infinite; }
+#forge-scene .ember-2 { animation-duration: 1.9s; animation-delay: .5s; }
+#forge-scene .ember-3 { animation-duration: 2.8s; animation-delay: 1s; }
+#forge-scene .ember-4 { animation-duration: 2.1s; animation-delay: 1.6s; }
+@keyframes ember-rise {
+  0%   { opacity: 0; transform: translate(0, 0); }
+  20%  { opacity: .9; }
+  100% { opacity: 0; transform: translate(-6px, -46px); }
+}
+
 #forge-scene .glow { animation: breathe 2.2s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .4; } }
 .molten-bar { height: 4px; background: var(--block-2); border-radius: 2px; overflow: hidden; margin: 1.6rem 0 .8rem; }
