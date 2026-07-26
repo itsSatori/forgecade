@@ -117,14 +117,17 @@ identical; the audio, dramaturgy and announcer sections are engine-independent.
 - Exactly one machine-readable manifest, immediately before </body>:
 
     <script type="application/json" id="forgecade-manifest">
-    {"kernel":"resolveJousts",
-     "nouns":{"chair":"actor position + steering","shelf":"wandering entity, kills above 235px/s","screw":"score, transferred on hit","aisle":"backdrop only"},
-     "victimStatus":{"name":"POSSESSED","seconds":2.2,"effect":"steering inverted"},
-     "interferencePerMin":18,
-     "laughLine":"the last player is DISCONTINUED at the ceremony"}
+    {"kernel":"resolveDips",
+     "nouns":{"forklift":"actor position + tilt","cake":"score, transferred on collision","veil":"drag modifier while carried","chapel":"backdrop only"},
+     "victimStatus":{"name":"COLD FEET","seconds":1.6,"effect":"reverse only"},
+     "interferencePerMin":14,
+     "laughLine":"the last forklift is served an annulment at the ceremony"}
     </script>
 
-  Valid JSON, under 700 characters, no trailing commas, no comments.
+  Valid JSON, under 700 characters, no trailing commas, no comments. The
+  example above describes a wedding for two forklifts — a premise that will
+  never come up. Copying its function name, nouns, status or numbers into
+  your own manifest is a failure; fill in what YOUR game actually does.
   kernel names the ONE function in which scoring a point and harming a named
   opponent both happen. A bench checks that function exists.
   nouns lists EVERY noun in the idea. Each value is the simulation state that
@@ -851,6 +854,24 @@ export async function validateGameHtml(html) {
       throw new Error(`uses <script type="module"> — ES modules are not supported; use a classic inline script`);
     }
     if (!code.trim()) continue;
+    // A script tag with a non-JavaScript type carries data, not code — the
+    // browser never executes it. The manifest we ask for is exactly this, and
+    // running JSON through a JS parser fails on its first colon.
+    const type = attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i)?.[1]?.toLowerCase();
+    const isJs = !type || /^(text|application)\/(java|ecma)script$/.test(type);
+    if (!isJs) {
+      if (type === "application/json") {
+        try {
+          JSON.parse(code);
+        } catch (err) {
+          throw new Error(
+            `the <script type="application/json"> block is not valid JSON (${err.message}) — ` +
+            `emit the manifest as strict JSON: double quotes, no trailing commas, no comments`,
+          );
+        }
+      }
+      continue;
+    }
     try {
       new vm.Script(code);
     } catch (err) {
