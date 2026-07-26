@@ -4,6 +4,7 @@ import { join, normalize, dirname, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachRooms, roomCount, broadcastAll } from "./rooms.js";
 import { generatorInfo } from "./generator.js";
+import { GAME_HEADERS } from "./game-headers.js";
 import { cfg } from "./env.js";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -21,20 +22,6 @@ const MIME = {
   ".json": "application/json",
   ".svg": "image/svg+xml",
   ".png": "image/png",
-};
-
-// Generated games are untrusted LLM output. The sandbox CSP gives them an
-// opaque origin: no access to the party frame, the WebSocket or the API —
-// they can only talk to the party frame via the SDK's postMessage bridge.
-// script-src hosts must stay in sync with ALLOWED_SCRIPT_HOSTS in generator.js —
-// the validator refuses at forge time what this header would block at play time.
-const GAME_HEADERS = {
-  "Content-Security-Policy":
-    "sandbox allow-scripts allow-pointer-lock; default-src 'none'; " +
-    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' " +
-    "https://cdn.babylonjs.com https://cdnjs.cloudflare.com; " +
-    "style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; " +
-    "connect-src 'none'",
 };
 
 async function listGames() {
@@ -113,6 +100,8 @@ const server = createServer(async (req, res) => {
         uptime: process.uptime(),
         rooms: roomCount(),
         model: generatorInfo.model,
+        provider: generatorInfo.provider,
+        effort: generatorInfo.effort,
         fake: generatorInfo.fake,
       });
     }
@@ -127,6 +116,13 @@ const server = createServer(async (req, res) => {
 
     if (method === "GET" && path.startsWith("/games/")) {
       const rel = path.slice("/games/".length) + (path.endsWith("/") ? "index.html" : "");
+      // games/_failed holds the raw output of forges that did not survive
+      // validation, plus the error that killed them. Useful for postmortems,
+      // not something to hand to whoever guesses the path.
+      if (rel.startsWith("_failed")) {
+        res.writeHead(404);
+        return res.end("Not found");
+      }
       const headers = rel.endsWith(".html") ? GAME_HEADERS : {};
       return await sendFrom(res, GAMES_DIR, rel, headers);
     }
@@ -164,6 +160,9 @@ server.listen(PORT, HOST, () => {
   } else if (!generatorInfo.hasCredentials) {
     console.warn("[forgecade] warning: no API credentials — generation will fail");
   } else {
-    console.log(`[forgecade] generator model: ${generatorInfo.model}`);
+    console.log(
+      `[forgecade] generator: ${generatorInfo.model} via ${generatorInfo.provider}` +
+      (generatorInfo.effort ? ` (reasoning ${generatorInfo.effort})` : ""),
+    );
   }
 });

@@ -3,6 +3,7 @@ import { writeFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
 import { generateGame, repairGame } from "./generator.js";
+import { cfg } from "./env.js";
 
 const SUBMIT_MS = 30_000;
 const DICE_MS = 4_000;
@@ -10,6 +11,18 @@ const MAX_IDEA_LENGTH = 500;
 const MAX_ROOMS = 200;
 const MAX_PLAYERS_PER_ROOM = 16;
 const MAX_FORGES = 2; // process-wide concurrent generations
+// Hard ceiling on generations per day. MAX_FORGES only caps how many run at
+// once — without a daily budget a single visitor can keep the forge busy round
+// the clock and burn the operator's model allowance. 0 disables the limit.
+const DAILY_FORGE_BUDGET = Number(cfg.FORGECADE_MAX_FORGES_PER_DAY) || 0;
+let forgesToday = 0;
+let budgetDay = new Date().toDateString();
+function budgetAllows() {
+  if (!DAILY_FORGE_BUDGET) return true;
+  const today = new Date().toDateString();
+  if (today !== budgetDay) { budgetDay = today; forgesToday = 0; }
+  return forgesToday < DAILY_FORGE_BUDGET;
+}
 const READY_TAKEOVER_MS = 45_000; // after this, anyone may play_next
 const GHOST_MS = 5 * 60_000; // disconnected this long → dropped on next round
 const RELAY_RATE = 40; // game/warmup relay messages per second per connection
@@ -175,10 +188,22 @@ function toRolling(room) {
 async function startForge(room, index) {
   if (room.forging) return; // re-entrancy guard: never run two forges for one room
   if (connectedPlayers(room).length === 0) {
-    // nobody left — keep the idea queued and park the room for the reaper
+    // Nobody left — park the idea and the room. The waitlist matters: without
+    // it the entry sits in room.queue with nothing left to pick it up, and
+    // since start_round treats a non-empty queue as "not idle", the host can
+    // never start another round either. A silent, permanent dead end.
+    forgeWaitlist.add(room);
     room.rolling = null;
     room.phase = room.currentGame ? "playing" : "lobby";
     return;
+  }
+  if (!budgetAllows()) {
+    const [dropped] = room.queue.splice(index, 1);
+    room.rolling = null;
+    room.forgeError = `the forge is out of fuel for today${dropped ? `: ${dropped.idea}` : ""}`;
+    room.phase = room.currentGame ? "playing" : "lobby";
+    console.warn(`[forgecade] ${room.code} refused: daily forge budget (${DAILY_FORGE_BUDGET}) spent`);
+    return sync(room);
   }
   if (activeForges >= MAX_FORGES) {
     // idea stays queued; pumpForge re-rolls once a slot frees up
@@ -199,6 +224,7 @@ async function startForge(room, index) {
   const started = Date.now();
   console.log(`[forgecade] ${room.code} forge start: "${entry.idea}"`);
   activeForges++;
+  forgesToday++;
   try {
     let lastSync = 0;
     const html = await generateGame(entry.idea, {
@@ -289,6 +315,9 @@ const handlers = {
     for (const [id, p] of room.players) {
       if (p.ws === null && p.disconnectedAt && Date.now() - p.disconnectedAt > GHOST_MS) {
         room.players.delete(id);
+        // drop their score too — a name the roster no longer knows renders as
+        // "???" on the podium, and it can still be winning the night
+        delete room.totals[id];
       }
     }
     for (const p of room.players.values()) p.ready = false; // ready is a lobby-only signal
@@ -400,24 +429,31 @@ const handlers = {
       return broadcast(room, { type: "toast", message: "the forge is at capacity — skip the game instead" });
     }
     reworkedSlugs.add(slug);
+    // Claim the forge slot BEFORE any await. The two reads below are the gap a
+    // mid-roll dice timer needs to fire startForge: both would then write
+    // room.forging, and whichever finishes second leaves the other's callbacks
+    // writing progress onto a null — an exception in a stream listener, which
+    // takes the whole process (and every other room) with it.
+    clearTimeout(room.timer);
+    room.rolling = null;
+    const abort = new AbortController();
+    room.forging = { idea: "", progress: 0, abort, repair: true };
     let broken, meta;
     try {
       broken = await readFile(join(room.gamesDir, slug, "index.html"), "utf8");
       meta = JSON.parse(await readFile(join(room.gamesDir, slug, "meta.json"), "utf8"));
     } catch {
-      return; // game vanished from disk — nothing to rework
+      room.forging = null; // game vanished from disk — nothing to rework
+      if (room.phase === "forging") room.phase = room.readyGame ? "ready" : "lobby";
+      return sync(room);
     }
+    room.forging.idea = meta.idea;
     const error = String(msg.error ?? "unknown runtime error").slice(0, 300);
-    // a dice mid-roll would fire a queue forge straight into this rework —
-    // settle it; the queue resumes once the rework lands
-    clearTimeout(room.timer);
-    room.rolling = null;
-    const abort = new AbortController();
-    room.forging = { idea: meta.idea, progress: 0, abort, repair: true };
     broadcast(room, { type: "toast", message: "that build came off the anvil cracked — reforging it" });
     sync(room);
     console.log(`[forgecade] ${room.code} rework start for ${slug}: ${error}`);
     activeForges++;
+    forgesToday++;
     try {
       let lastSync = 0;
       const html = await repairGame(meta.idea, broken, error, {
@@ -471,6 +507,11 @@ const handlers = {
       }
       console.error(`[forgecade] ${room.code} rework failed for ${slug}:`, err.message);
       broadcast(room, { type: "toast", message: "the rework failed too — skip that one" });
+      // Leave the forging view behind. Without this the room keeps phase
+      // "forging" while room.forging is null: an anvil that never finishes,
+      // unrecoverable by reload or rejoin. The cancel path above already does
+      // this — the failure path forgot to.
+      if (room.phase === "forging") room.phase = room.readyGame ? "ready" : "lobby";
       sync(room);
     } finally {
       activeForges--;
@@ -495,9 +536,14 @@ const handlers = {
       .filter(([id]) => room.players.has(id))
       .map(([id, s]) => [id, s]);
     const distinct = [...new Set(entries.map(([, s]) => s))].sort((a, b) => b - a);
-    for (const [id, s] of entries) {
-      const points = [3, 2, 1][distinct.indexOf(s)] ?? 0;
-      if (points) room.totals[id] = (room.totals[id] ?? 0) + points;
+    // A round where everyone ended level has no winner. Without this guard the
+    // 0-0 draw a broken game produces hands every player 3 points, so the
+    // night's podium ends up ranking whoever survived the most dud games.
+    if (distinct.length > 1) {
+      for (const [id, s] of entries) {
+        const points = [3, 2, 1][distinct.indexOf(s)] ?? 0;
+        if (points) room.totals[id] = (room.totals[id] ?? 0) + points;
+      }
     }
     sync(room);
   },
@@ -584,6 +630,8 @@ function joinRoom(room, ws, name) {
   room.players.set(player.id, player);
   room.hostId ??= player.id;
   ensureHost(room);
+  // someone is back — pick up any forge that was parked while the room was empty
+  if (forgeWaitlist.has(room)) pumpForge();
   ws.send(JSON.stringify({
     type: "joined",
     code: room.code,
@@ -620,7 +668,9 @@ function handleClose(room, player) {
 }
 
 export function attachRooms(server, gamesDir, { accessCode } = {}) {
-  const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
+  // 8 KB is generous: the biggest legitimate message is a game relay payload,
+  // which the SDK documents as 4 KB. 64 KB just gave a flooder more leverage.
+  const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 8 * 1024 });
   wss.on("error", (err) => console.warn("[forgecade] wss error:", err.message));
 
   // keepalive: keeps idle sockets alive through reverse proxies and
