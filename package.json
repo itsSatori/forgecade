@@ -4,7 +4,8 @@
   "description": "Self-hosted AI game generator",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "FORGECADE_FAKE_GENERATOR=1 node src/server.js"
+    "dev": "FORGECADE_FAKE_GENERATOR=1 node src/server.js",
+    "smoke": "node src/smoketest.js"
   },
   "engines": {
     "node": ">=20"

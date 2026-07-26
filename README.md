@@ -71,6 +71,27 @@ Open `http://localhost:4242`, create a group, share the code.
 To play with remote friends, run it on a box they can reach and set
 `FORGECADE_HOST=0.0.0.0` (ideally behind a reverse proxy with TLS).
 
+Any Anthropic-compatible endpoint works too (`ANTHROPIC_BASE_URL`), and so does
+the local [Codex CLI](https://developers.openai.com/codex/cli), which spends a
+ChatGPT subscription allowance rather than API credits — see `.env.example`.
+
+### Quality gate
+
+A one-shot model writes a whole multiplayer game blind, so some of them are
+duds — and the duds are rarely obvious: they parse cleanly, animate happily,
+and simply never let you play. `src/smoketest.js` catches them by *playing*
+each candidate in headless Chrome (real SDK, real sandbox headers, several
+players in several frames relaying messages) and checking the one thing that
+cannot be faked: whether the round ever reaches `Forgecade.end`.
+
+```sh
+npm run smoke -- games/<slug>/index.html 4   # judge one game with 4 players
+```
+
+Set `FORGECADE_CANDIDATES=3` and the forge builds three games at once, plays
+all of them, and ships the one that holds up. The candidates overlap, so the
+party waits barely longer than for a single one.
+
 ## Roadmap
 
 - [x] Room system: codes, lobby, phases, reconnect
@@ -80,6 +101,9 @@ To play with remote friends, run it on a box they can reach and set
 - [x] Demo mode (`npm run dev`) — no API key needed
 - [x] Warm-up runner: a pixel mini game in every waiting moment — same seeded
       obstacle course for the whole room, bounce off each other's heads
+- [x] Smoke test: every forged game is played in a headless browser before the
+      party sees it — a round that never reaches `Forgecade.end` never ships
+- [x] Best-of-N: forge several candidates at once, ship the one that plays
 - [ ] Tune the generator prompt on real games (playtesting!)
 - [ ] Scoreboard across rounds
 - [ ] Game archive: replay the best forged games from past nights

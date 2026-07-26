@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Forgecade smoke harness</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  #grid{display:grid;width:100vw;height:100vh;gap:2px}
+  iframe{border:0;width:100%;height:100%;background:#000;display:block}
+</style>
+</head>
+<body>
+<div id="grid"></div>
+<script>
+// Stands in for the party frame: speaks the exact protocol app.js speaks, so a
+// game cannot tell the difference. Relays every send() to all other players,
+// which is what the server does for real rooms.
+const q = new URLSearchParams(location.search);
+const COUNT = Math.max(1, Math.min(8, Number(q.get("players")) || 2));
+const SEED = Number(q.get("seed")) || 424242;
+const PALETTE = ["#4bb956", "#ff453a", "#ff9f43", "#5b8db8", "#c76a5a", "#8a63c2", "#2f9e8f", "#b58900"];
+const NAMES = ["Alex", "Bea", "Cem", "Dana", "Emil", "Fee", "Gus", "Hana"];
+
+const players = Array.from({ length: COUNT }, (_, i) => ({
+  id: `p-${i}`, name: NAMES[i], color: PALETTE[i],
+}));
+
+const grid = document.getElementById("grid");
+const cols = COUNT <= 2 ? COUNT : COUNT <= 4 ? 2 : 4;
+grid.style.gridTemplateColumns = `repeat(${cols},1fr)`;
+grid.style.gridTemplateRows = `repeat(${Math.ceil(COUNT / cols)},1fr)`;
+
+const frames = players.map(() => {
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts allow-pointer-lock");
+  grid.appendChild(f);
+  return f;
+});
+
+// Everything the runner needs to judge the game, readable from the page.
+const H = {
+  players: players.map((p) => p.name),
+  ready: players.map(() => false),
+  errors: [],            // {player, message} — uncaught errors reported by the SDK
+  sends: players.map(() => 0),
+  ended: null,           // the host's Forgecade.end payload
+  endedBy: null,
+  started: Date.now(),
+  // Traffic shape. "Did it run" is binary, but a game where only the host ever
+  // speaks is one where the guests are spectators, and a game whose payloads
+  // never vary is one where nothing happens. Both are invisible to the
+  // pass/fail checks, so record them here for whoever grades the game.
+  guestSends: 0,         // messages originating from non-hosts
+  payloadKeys: {},       // distinct top-level keys seen across all messages
+  firstSendAt: null,     // ms after load until the first message — how fast it starts
+  rects: () => frames.map((f) => {
+    const r = f.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  }),
+};
+window.HARNESS = H;
+
+const post = (i, m) => frames[i].contentWindow?.postMessage({ __forgecade: true, ...m }, "*");
+
+window.addEventListener("message", (e) => {
+  const m = e.data;
+  if (!m || m.__forgecade !== true) return;
+  const i = frames.findIndex((f) => f.contentWindow === e.source);
+  if (i < 0) return;
+  if (m.type === "ready") {
+    H.ready[i] = true;
+    post(i, {
+      type: "init",
+      ctx: { players, me: players[i], isHost: i === 0, seed: SEED },
+    });
+  } else if (m.type === "send") {
+    H.sends[i]++;
+    if (i !== 0) H.guestSends++;
+    H.firstSendAt ??= Date.now() - H.started;
+    if (m.data && typeof m.data === "object" && !Array.isArray(m.data)) {
+      for (const k of Object.keys(m.data)) H.payloadKeys[k] = (H.payloadKeys[k] ?? 0) + 1;
+    }
+    for (let j = 0; j < frames.length; j++) if (j !== i) post(j, { type: "msg", data: m.data, from: players[i].id });
+  } else if (m.type === "end") {
+    // only the host's result counts, exactly like app.js
+    if (i === 0 && !H.ended) { H.ended = m.result ?? {}; H.endedBy = players[i].name; }
+  } else if (m.type === "error") {
+    H.errors.push({ player: players[i].name, message: String(m.message).slice(0, 200) });
+  }
+});
+
+// seat index rides in the URL so the in-frame autoplayer knows which player it
+// is — without it every bot behaves identically and nobody ever collides
+frames.forEach((f, i) => f.setAttribute("src", `/game/?p=${COUNT}&seat=${i}`));
+</script>
+</body>
+</html>
